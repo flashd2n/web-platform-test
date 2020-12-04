@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>main</title>
+    <script src="./platform.web.umd.js"></script>
+    <script src="./workspaces.umd.js"></script>
+</head>
+<body>  
+    <h1>Main</h1>
+</body>
+<script>
+    const config = {
+        glue: {
+            libraries: [GlueWorkspaces]
+        },
+        applications: {
+            mode: "local",
+            local: [
+                {
+                    name: "SimpleOne",
+                    details: {
+                        url: "http://localhost:9200/"
+                    }
+                },
+                {
+                    name: "SimpleTwo",
+                    details: {
+                        url: "http://localhost:9100/"
+                    }
+                }
+            ]
+        },
+        workspaces: {
+            src: "http://localhost:9300/"
+        }
+    }
+
+    // const config = {
+    //     applications: {
+    //         mode: "remote",
+    //         remote: {
+    //             url: "http://localhost:4224/api/glue-apps",
+    //             pollingInterval: 5000
+    //         }
+    //     }
+    // }
+
+    // const config = {
+    //     applications: {
+    //         mode: "supplier",
+    //         supplier: {
+    //             fetch: async () => {
+    //                 const response = await fetch("http://localhost:4224/api/glue-apps")
+    //                 const parsed = await response.json();
+
+    //                 return parsed.applications;
+    //             },
+    //             pollingInterval: 3000
+    //         }
+    //     }
+    // }
+
+    GlueWebPlatform(config)
+        .then((data) => {
+            window.glue = data.glue;
+            console.log("done");
+        })
+        .catch(console.warn);
+</script>
+</html>

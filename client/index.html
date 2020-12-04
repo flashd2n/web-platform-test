@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client</title>
+    <script src="./web.umd.js"></script>
+    <script src="./workspaces.umd.js"></script>
+</head>
+
+<body>
+    <h1>Client</h1>
+    <iframe id="one" width="300" height="200" src="http://localhost:9200/"></iframe>
+</body>
+<script>
+    GlueWeb({ libraries: [GlueWorkspaces] })
+        .then((glue) => {
+            window.glue = glue;
+            console.log("done");
+        })
+        .catch(console.warn);
+</script>
+
+</html>
