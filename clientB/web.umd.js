@@ -1562,6 +1562,16 @@
                 this.sub.onData((pkg) => this.passMessageController(pkg.data));
             });
         }
+        getInteropInstance(windowId) {
+            const result = this.coreGlue.interop.servers().find((s) => s.windowId && s.windowId === windowId);
+            return {
+                application: result === null || result === void 0 ? void 0 : result.application,
+                applicationName: result === null || result === void 0 ? void 0 : result.applicationName,
+                peerId: result === null || result === void 0 ? void 0 : result.peerId,
+                instance: result === null || result === void 0 ? void 0 : result.instance,
+                windowId: result === null || result === void 0 ? void 0 : result.windowId
+            };
+        }
         send(domain, operation, operationData) {
             return __awaiter(this, void 0, void 0, function* () {
                 if (operation.dataDecoder) {
@@ -1865,9 +1875,10 @@
             this.myCtxKey = `___instance___${this.data.id}`;
         }
         toApi() {
+            const agm = this.bridge.getInteropInstance(this.data.id);
             const api = {
                 id: this.data.id,
-                agm: { windowId: this.data.id },
+                agm,
                 application: this.application,
                 stop: this.stop.bind(this),
                 getContext: this.getContext.bind(this)
@@ -4611,7 +4622,7 @@
                     glue42core: {
                         type: _this.messages.connectionRequest.name,
                         clientId: _this.myClientId,
-                        clientType: parentType === "top" ? "grandChild" : "child",
+                        clientType: parentType === "top" || parentType === "workspace" ? "grandChild" : "child",
                         bridgeInstanceId: bridgeInstanceId
                     }
                 };

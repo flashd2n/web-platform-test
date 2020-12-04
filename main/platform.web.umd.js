@@ -1587,6 +1587,16 @@
                 this.sub.onData((pkg) => this.passMessageController(pkg.data));
             });
         }
+        getInteropInstance(windowId) {
+            const result = this.coreGlue.interop.servers().find((s) => s.windowId && s.windowId === windowId);
+            return {
+                application: result === null || result === void 0 ? void 0 : result.application,
+                applicationName: result === null || result === void 0 ? void 0 : result.applicationName,
+                peerId: result === null || result === void 0 ? void 0 : result.peerId,
+                instance: result === null || result === void 0 ? void 0 : result.instance,
+                windowId: result === null || result === void 0 ? void 0 : result.windowId
+            };
+        }
         send(domain, operation, operationData) {
             return __awaiter$1(this, void 0, void 0, function* () {
                 if (operation.dataDecoder) {
@@ -1890,9 +1900,10 @@
             this.myCtxKey = `___instance___${this.data.id}`;
         }
         toApi() {
+            const agm = this.bridge.getInteropInstance(this.data.id);
             const api = {
                 id: this.data.id,
-                agm: { windowId: this.data.id },
+                agm,
                 application: this.application,
                 stop: this.stop.bind(this),
                 getContext: this.getContext.bind(this)
@@ -4636,7 +4647,7 @@
                     glue42core: {
                         type: _this.messages.connectionRequest.name,
                         clientId: _this.myClientId,
-                        clientType: parentType === "top" ? "grandChild" : "child",
+                        clientType: parentType === "top" || parentType === "workspace" ? "grandChild" : "child",
                         bridgeInstanceId: bridgeInstanceId
                     }
                 };
@@ -14918,7 +14929,7 @@
                     glue42core: {
                         type: _this.messages.connectionRequest.name,
                         clientId: _this.myClientId,
-                        clientType: parentType === "top" ? "grandChild" : "child",
+                        clientType: parentType === "top" || parentType === "workspace" ? "grandChild" : "child",
                         bridgeInstanceId: bridgeInstanceId
                     }
                 };
@@ -20700,6 +20711,7 @@
             this.sessionStorage = sessionStorage;
             this.stateController = stateController;
             this.ioc = ioc;
+            this.applicationStartTimeoutMs = 15000;
             this.started = false;
             this.applications = [];
             this.locks = {};
@@ -20783,7 +20795,7 @@
             }
         }
         handleApplicationStart(config, commandId) {
-            var _a, _b, _c, _d, _e, _f, _g, _h;
+            var _a, _b, _c, _d, _e, _f, _g;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling application start command for application: ${config.name}`);
                 const appDefinition = this.applications.find((app) => app.name === config.name);
@@ -20807,27 +20819,27 @@
                     (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] wait for AGM is set, configuring the lock`);
                     this.setLock(instance.id);
                 }
-                yield this.notifyWindows(instance, config.context);
-                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] the windows controller has been successfully notified, waiting for the first lock key to be lifted if defined`);
-                yield ((_f = this.locks[instance.id]) === null || _f === void 0 ? void 0 : _f.keyOne);
+                yield this.notifyWindows(instance, config.context, childWindow);
+                yield PromiseWrap$1(() => { var _a; return (_a = this.locks[instance.id]) === null || _a === void 0 ? void 0 : _a.keyOne; }, this.applicationStartTimeoutMs, `Application start for ${config.name} timed out waiting for client to initialize Glue`);
+                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] the windows controller has been successfully notified`);
                 const processConfig = {
                     data: instance,
                     monitorState: config.waitForAGMReady ? undefined : { child: childWindow },
                     context: config.context
                 };
                 yield this.processNewInstance(processConfig);
-                (_g = this.logger) === null || _g === void 0 ? void 0 : _g.trace(`[${commandId}] the new instance with id ${instance.id} has been saved, announced and context set, lifting key two and responding to caller`);
-                (_h = this.locks[instance.id]) === null || _h === void 0 ? void 0 : _h.openKeyTwo();
+                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace(`[${commandId}] the new instance with id ${instance.id} has been saved, announced and context set, lifting key two and responding to caller`);
+                (_g = this.locks[instance.id]) === null || _g === void 0 ? void 0 : _g.openKeyTwo();
                 return instance;
             });
         }
-        notifyWindows(instance, context) {
+        notifyWindows(instance, context, child) {
             return __awaiter(this, void 0, void 0, function* () {
                 const windowData = {
                     windowId: instance.id,
                     name: `${instance.applicationName}_${instance.id}`
                 };
-                yield this.ioc.windowsController.processNewWindow(windowData, context);
+                yield this.ioc.windowsController.processNewWindow(windowData, context, child);
             });
         }
         handleAppHello(helloMsg, commandId) {
