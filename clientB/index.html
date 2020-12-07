@@ -10,13 +10,18 @@
 </head>
 
 <body>
-    <h1>ClientB</h1>
+    <h1>Client B</h1>
 </body>
 <script>
-    GlueWeb({ libraries: [GlueWorkspaces] })
+    const config = {
+        libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
+        systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
+    };
+
+    GlueWeb(config)
         .then((glue) => {
             window.glue = glue;
-            console.log("done - B");
+            console.log("done");
         })
         .catch(console.warn);
 </script>

@@ -2388,24 +2388,36 @@
         }
         state() {
             return __awaiter(this, void 0, void 0, function* () {
+                if (!window.glue42gd) {
+                    throw new Error("State operations are not supported in Glue42 Core");
+                }
                 const myId = getData$2(this).summary.id;
                 return getData$2(this).controller.getFrameState(myId);
             });
         }
         minimize() {
             return __awaiter(this, void 0, void 0, function* () {
+                if (!window.glue42gd) {
+                    throw new Error("State operations are not supported in Glue42 Core");
+                }
                 const myId = getData$2(this).summary.id;
                 return getData$2(this).controller.changeFrameState(myId, "minimized");
             });
         }
         maximize() {
             return __awaiter(this, void 0, void 0, function* () {
+                if (!window.glue42gd) {
+                    throw new Error("State operations are not supported in Glue42 Core");
+                }
                 const myId = getData$2(this).summary.id;
                 return getData$2(this).controller.changeFrameState(myId, "maximized");
             });
         }
         restore() {
             return __awaiter(this, void 0, void 0, function* () {
+                if (!window.glue42gd) {
+                    throw new Error("State operations are not supported in Glue42 Core");
+                }
                 const myId = getData$2(this).summary.id;
                 return getData$2(this).controller.changeFrameState(myId, "normal");
             });

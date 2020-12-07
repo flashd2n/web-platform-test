@@ -35,11 +35,37 @@
         libraries: []
     };
     const parseConfig = (config) => {
-        return Object.assign({}, defaultConfig, config);
+        var _a;
+        const combined = Object.assign({}, defaultConfig, config);
+        if (combined.systemLogger) {
+            combined.logger = (_a = combined.systemLogger.level) !== null && _a !== void 0 ? _a : "trace";
+        }
+        return combined;
+    };
+
+    const checkSingleton = () => {
+        const glue42CoreNamespace = window.glue42core;
+        if (!glue42CoreNamespace) {
+            window.glue42core = { webStarted: true };
+            return;
+        }
+        if (glue42CoreNamespace.webStarted) {
+            throw new Error("The Glue42 Core Web has already been started for this application.");
+        }
+        glue42CoreNamespace.webStarted = true;
     };
 
     const enterprise = (config) => {
-        return {};
+        var _a, _b;
+        const enterpriseConfig = {
+            windows: true,
+            layouts: "full",
+            appManager: "full",
+            channels: true,
+            libraries: config.libraries,
+            logger: (_b = (_a = config === null || config === void 0 ? void 0 : config.systemLogger) === null || _a === void 0 ? void 0 : _a.level) !== null && _b !== void 0 ? _b : "warn"
+        };
+        return window.Glue(enterpriseConfig);
     };
 
     /**
@@ -872,7 +898,7 @@
     });
     const windowTitleConfigDecoder = object({
         windowId: nonEmptyStringDecoder,
-        title: nonEmptyStringDecoder
+        title: string()
     });
     const windowMoveResizeConfigDecoder = object({
         windowId: nonEmptyStringDecoder,
@@ -1276,7 +1302,8 @@
         }
         getContext() {
             return __awaiter(this, void 0, void 0, function* () {
-                return this._bridge.contextLib.get(this.myCtxKey);
+                const ctx = yield this._bridge.contextLib.get(this.myCtxKey);
+                return ctx;
             });
         }
         updateContext(context) {
@@ -2082,13 +2109,67 @@
         }
     }
 
+    class NotificationsController {
+        start(coreGlue) {
+            return __awaiter(this, void 0, void 0, function* () {
+                this.logger = coreGlue.logger.subLogger("notifications.controller.web");
+                this.logger.trace("starting the web notifications controller");
+                this.interop = coreGlue.interop;
+                const api = this.toApi();
+                coreGlue.notifications = api;
+                this.logger.trace("notifications are ready");
+            });
+        }
+        handleBridgeMessage() {
+            return __awaiter(this, void 0, void 0, function* () {
+            });
+        }
+        toApi() {
+            const api = {
+                raise: this.raise.bind(this)
+            };
+            return Object.freeze(api);
+        }
+        raise(options) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!("Notification" in window)) {
+                    throw new Error("this browser does not support desktop notification");
+                }
+                let permissionPromise;
+                if (Notification.permission === "granted") {
+                    permissionPromise = Promise.resolve("granted");
+                }
+                else if (Notification.permission === "denied") {
+                    permissionPromise = Promise.reject("no permissions from user");
+                }
+                else {
+                    permissionPromise = Notification.requestPermission();
+                }
+                yield permissionPromise;
+                const notification = this.raiseUsingWebApi(options);
+                if (options.clickInterop) {
+                    const interopOptions = options.clickInterop;
+                    notification.onclick = () => {
+                        var _a, _b;
+                        this.interop.invoke(interopOptions.method, (_a = interopOptions === null || interopOptions === void 0 ? void 0 : interopOptions.arguments) !== null && _a !== void 0 ? _a : {}, (_b = interopOptions === null || interopOptions === void 0 ? void 0 : interopOptions.target) !== null && _b !== void 0 ? _b : "best");
+                    };
+                }
+                return notification;
+            });
+        }
+        raiseUsingWebApi(options) {
+            return new Notification(options.title);
+        }
+    }
+
     class IoC {
         constructor(coreGlue) {
             this.coreGlue = coreGlue;
             this.controllers = {
                 windows: this.windowsController,
                 appManager: this.appManagerController,
-                layouts: this.layoutsController
+                layouts: this.layoutsController,
+                notifications: this.notificationsController
             };
         }
         get windowsController() {
@@ -2108,6 +2189,12 @@
                 this._layoutsControllerInstance = new LayoutsController();
             }
             return this._layoutsControllerInstance;
+        }
+        get notificationsController() {
+            if (!this._notificationsControllerInstance) {
+                this._notificationsControllerInstance = new NotificationsController();
+            }
+            return this._notificationsControllerInstance;
         }
         get bridge() {
             if (!this._bridgeInstance) {
@@ -2139,8 +2226,9 @@
         return (userConfig) => __awaiter(void 0, void 0, void 0, function* () {
             const config = parseConfig(userConfig);
             if (window.glue42gd) {
-                return enterprise();
+                return enterprise(config);
             }
+            checkSingleton();
             const glue = yield PromiseWrap(() => coreFactoryFunction(config), 30000, "Glue Web initialization timed out");
             const logger = glue.logger.subLogger("web.main.controller");
             const ioc = new IoC(glue);
@@ -5207,7 +5295,7 @@
         }
     };
 
-    var version = "5.2.7";
+    var version = "5.2.8-beta.0";
 
     function prepareConfig (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -8957,7 +9045,7 @@
     GlueCore.version = version;
     GlueCore.default = GlueCore;
 
-    var version$1 = "1.6.7";
+    var version$1 = "2.0.0-beta.0";
 
     const glueWebFactory = createFactoryFunction(GlueCore);
     if (typeof window !== "undefined") {

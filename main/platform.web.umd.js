@@ -60,11 +60,37 @@
         libraries: []
     };
     const parseConfig = (config) => {
-        return Object.assign({}, defaultConfig, config);
+        var _a;
+        const combined = Object.assign({}, defaultConfig, config);
+        if (combined.systemLogger) {
+            combined.logger = (_a = combined.systemLogger.level) !== null && _a !== void 0 ? _a : "trace";
+        }
+        return combined;
+    };
+
+    const checkSingleton = () => {
+        const glue42CoreNamespace = window.glue42core;
+        if (!glue42CoreNamespace) {
+            window.glue42core = { webStarted: true };
+            return;
+        }
+        if (glue42CoreNamespace.webStarted) {
+            throw new Error("The Glue42 Core Web has already been started for this application.");
+        }
+        glue42CoreNamespace.webStarted = true;
     };
 
     const enterprise = (config) => {
-        return {};
+        var _a, _b;
+        const enterpriseConfig = {
+            windows: true,
+            layouts: "full",
+            appManager: "full",
+            channels: true,
+            libraries: config.libraries,
+            logger: (_b = (_a = config === null || config === void 0 ? void 0 : config.systemLogger) === null || _a === void 0 ? void 0 : _a.level) !== null && _b !== void 0 ? _b : "warn"
+        };
+        return window.Glue(enterpriseConfig);
     };
 
     /**
@@ -897,7 +923,7 @@
     });
     const windowTitleConfigDecoder = object({
         windowId: nonEmptyStringDecoder,
-        title: nonEmptyStringDecoder
+        title: string()
     });
     const windowMoveResizeConfigDecoder = object({
         windowId: nonEmptyStringDecoder,
@@ -1301,7 +1327,8 @@
         }
         getContext() {
             return __awaiter$1(this, void 0, void 0, function* () {
-                return this._bridge.contextLib.get(this.myCtxKey);
+                const ctx = yield this._bridge.contextLib.get(this.myCtxKey);
+                return ctx;
             });
         }
         updateContext(context) {
@@ -2107,13 +2134,67 @@
         }
     }
 
+    class NotificationsController {
+        start(coreGlue) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                this.logger = coreGlue.logger.subLogger("notifications.controller.web");
+                this.logger.trace("starting the web notifications controller");
+                this.interop = coreGlue.interop;
+                const api = this.toApi();
+                coreGlue.notifications = api;
+                this.logger.trace("notifications are ready");
+            });
+        }
+        handleBridgeMessage() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+            });
+        }
+        toApi() {
+            const api = {
+                raise: this.raise.bind(this)
+            };
+            return Object.freeze(api);
+        }
+        raise(options) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                if (!("Notification" in window)) {
+                    throw new Error("this browser does not support desktop notification");
+                }
+                let permissionPromise;
+                if (Notification.permission === "granted") {
+                    permissionPromise = Promise.resolve("granted");
+                }
+                else if (Notification.permission === "denied") {
+                    permissionPromise = Promise.reject("no permissions from user");
+                }
+                else {
+                    permissionPromise = Notification.requestPermission();
+                }
+                yield permissionPromise;
+                const notification = this.raiseUsingWebApi(options);
+                if (options.clickInterop) {
+                    const interopOptions = options.clickInterop;
+                    notification.onclick = () => {
+                        var _a, _b;
+                        this.interop.invoke(interopOptions.method, (_a = interopOptions === null || interopOptions === void 0 ? void 0 : interopOptions.arguments) !== null && _a !== void 0 ? _a : {}, (_b = interopOptions === null || interopOptions === void 0 ? void 0 : interopOptions.target) !== null && _b !== void 0 ? _b : "best");
+                    };
+                }
+                return notification;
+            });
+        }
+        raiseUsingWebApi(options) {
+            return new Notification(options.title);
+        }
+    }
+
     class IoC {
         constructor(coreGlue) {
             this.coreGlue = coreGlue;
             this.controllers = {
                 windows: this.windowsController,
                 appManager: this.appManagerController,
-                layouts: this.layoutsController
+                layouts: this.layoutsController,
+                notifications: this.notificationsController
             };
         }
         get windowsController() {
@@ -2133,6 +2214,12 @@
                 this._layoutsControllerInstance = new LayoutsController();
             }
             return this._layoutsControllerInstance;
+        }
+        get notificationsController() {
+            if (!this._notificationsControllerInstance) {
+                this._notificationsControllerInstance = new NotificationsController();
+            }
+            return this._notificationsControllerInstance;
         }
         get bridge() {
             if (!this._bridgeInstance) {
@@ -2164,8 +2251,9 @@
         return (userConfig) => __awaiter$1(void 0, void 0, void 0, function* () {
             const config = parseConfig(userConfig);
             if (window.glue42gd) {
-                return enterprise();
+                return enterprise(config);
             }
+            checkSingleton();
             const glue = yield PromiseWrap(() => coreFactoryFunction(config), 30000, "Glue Web initialization timed out");
             const logger = glue.logger.subLogger("web.main.controller");
             const ioc = new IoC(glue);
@@ -5232,7 +5320,7 @@
         }
     };
 
-    var version = "5.2.7";
+    var version = "5.2.8-beta.0";
 
     function prepareConfig (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -8982,7 +9070,7 @@
     GlueCore.version = version;
     GlueCore.default = GlueCore;
 
-    var version$1 = "1.6.7";
+    var version$1 = "2.0.0-beta.0";
 
     const glueWebFactory = createFactoryFunction(GlueCore);
     if (typeof window !== "undefined") {
@@ -11744,7 +11832,7 @@
         fetch: anyJson$1().andThen((result) => functionCheck(result, "supplier fetch")),
         timeout: optional$1(nonNegativeNumberDecoder$1),
         pollingInterval: optional$1(nonNegativeNumberDecoder$1),
-        save: optional$1(anyJson$1().andThen((result) => functionCheck(result, "supplier post"))),
+        save: optional$1(anyJson$1().andThen((result) => functionCheck(result, "supplier save"))),
         delete: optional$1(anyJson$1().andThen((result) => functionCheck(result, "supplier delete")))
     });
     const channelDefinitionDecoder = object$1({
@@ -12179,9 +12267,9 @@
         }
         start(config) {
             return __awaiter(this, void 0, void 0, function* () {
-                yield this.portsBridge.start();
+                yield this.portsBridge.start(config.gateway);
                 this.portsBridge.onClientUnloaded(this.handleClientUnloaded.bind(this));
-                yield this.glueController.start();
+                yield this.glueController.start(config);
                 yield Promise.all(Object.values(this.controllers).map((controller) => controller.start(config)));
                 yield Promise.all([
                     this.glueController.createPlatformSystemMethod(this.handleControlMessage.bind(this)),
@@ -12400,7 +12488,7 @@
 
     var cjs = deepmerge_1;
 
-    var version$3 = "0.0.0";
+    var version$3 = "0.0.1-beta.1";
 
     class Platform {
         constructor(controller, config) {
@@ -12429,11 +12517,15 @@
             return version$3;
         }
         checkSingleton() {
-            var _a;
-            if (typeof ((_a = window) === null || _a === void 0 ? void 0 : _a.glue42core) !== "undefined") {
+            const glue42CoreNamespace = window.glue42core;
+            if (!glue42CoreNamespace) {
+                window.glue42core = { platformStarted: true };
+                return;
+            }
+            if (glue42CoreNamespace.platformStarted) {
                 throw new Error("The Glue42 Core Platform has already been started for this application.");
             }
-            window.glue42core = { started: true };
+            glue42CoreNamespace.platformStarted = true;
         }
         processConfig(config = {}) {
             const verifiedConfig = platformConfigDecoder.runWithException(config);
@@ -15514,7 +15606,7 @@
         }
     };
 
-    var version$4 = "5.2.7";
+    var version$4 = "5.2.8-beta.0";
 
     function prepareConfig$1 (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -19272,6 +19364,102 @@
     GlueCore$1.version = version$4;
     GlueCore$1.default = GlueCore$1;
 
+    const PromiseWrap$1 = (promise, timeoutMilliseconds, timeoutMessage) => {
+        return new Promise((resolve, reject) => {
+            let promiseActive = true;
+            const timeout = setTimeout(() => {
+                if (!promiseActive) {
+                    return;
+                }
+                promiseActive = false;
+                const message = timeoutMessage || `Promise timeout hit: ${timeoutMilliseconds}`;
+                reject(message);
+            }, timeoutMilliseconds);
+            promise()
+                .then((result) => {
+                if (!promiseActive) {
+                    return;
+                }
+                promiseActive = false;
+                clearTimeout(timeout);
+                resolve(result);
+            })
+                .catch((error) => {
+                if (!promiseActive) {
+                    return;
+                }
+                promiseActive = false;
+                clearTimeout(timeout);
+                reject(error);
+            });
+        });
+    };
+    const PromisePlus$3 = (executor, timeoutMilliseconds, timeoutMessage) => {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                const message = timeoutMessage || `Promise timeout hit: ${timeoutMilliseconds}`;
+                reject(message);
+            }, timeoutMilliseconds);
+            const providedPromise = new Promise(executor);
+            providedPromise
+                .then((result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            })
+                .catch((error) => {
+                clearTimeout(timeout);
+                reject(error);
+            });
+        });
+    };
+
+    const getRelativeBounds = (rect, relativeTo, relativeDirection) => {
+        const edgeDistance = 0;
+        if (relativeDirection === "bottom") {
+            return {
+                left: relativeTo.left,
+                top: relativeTo.top + relativeTo.height + edgeDistance,
+                width: relativeTo.width,
+                height: rect.height
+            };
+        }
+        if (relativeDirection === "top") {
+            return {
+                left: relativeTo.left,
+                top: relativeTo.top - rect.height - edgeDistance,
+                width: relativeTo.width,
+                height: rect.height
+            };
+        }
+        if (relativeDirection === "right") {
+            return {
+                left: relativeTo.left + relativeTo.width + edgeDistance,
+                top: relativeTo.top,
+                width: rect.width,
+                height: relativeTo.height
+            };
+        }
+        if (relativeDirection === "left") {
+            return {
+                left: relativeTo.left - rect.width - edgeDistance,
+                top: relativeTo.top,
+                width: rect.width,
+                height: relativeTo.height
+            };
+        }
+        throw new Error("invalid relativeDirection");
+    };
+    const objEqual = (objOne, objTwo) => JSON.stringify(objOne) === JSON.stringify(objTwo);
+    const waitFor = (invocations, callback) => {
+        let left = invocations;
+        return () => {
+            left--;
+            if (left === 0) {
+                callback();
+            }
+        };
+    };
+
     class GlueController {
         constructor(portsBridge, sessionStorage) {
             this.portsBridge = portsBridge;
@@ -19280,9 +19468,9 @@
         get platformWindowId() {
             return this._platformClientWindowId.slice();
         }
-        start() {
+        start(config) {
             return __awaiter(this, void 0, void 0, function* () {
-                this._systemGlue = yield this.initSystemGlue();
+                this._systemGlue = yield this.initSystemGlue(config.glue);
                 logger.setLogger(this._systemGlue.logger);
             });
         }
@@ -19299,7 +19487,8 @@
                     gateway: { webPlatform: { port, windowId: this.platformWindowId } }
                 };
                 const c = Object.assign({}, config, webConfig);
-                return factory ? yield factory(c) : yield glueWebFactory(c);
+                this._clientGlue = factory ? yield factory(c) : yield glueWebFactory(c);
+                return this._clientGlue;
             });
         }
         createPlatformSystemMethod(handler) {
@@ -19382,18 +19571,30 @@
             });
         }
         setWindowStartContext(windowId, context) {
-            return __awaiter(this, void 0, void 0, function* () {
+            return PromisePlus$3((resolve, reject) => {
+                let unsub;
+                const ready = waitFor(3, () => {
+                    resolve();
+                    unsub();
+                });
                 const key = `___window___${windowId}`;
-                yield this._systemGlue.contexts.set(key, context);
-            });
+                this._clientGlue.contexts.subscribe(key, ready)
+                    .then((un) => {
+                    unsub = un;
+                    ready();
+                });
+                this._systemGlue.contexts.set(key, context).then(ready).catch(reject);
+            }, 10000, `Timed out waiting to set the window context for: ${windowId}`);
         }
-        initSystemGlue() {
+        initSystemGlue(config) {
+            var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 const port = yield this.portsBridge.createInternalClient();
+                const logLevel = (_b = (_a = config === null || config === void 0 ? void 0 : config.systemLogger) === null || _a === void 0 ? void 0 : _a.level) !== null && _b !== void 0 ? _b : "trace";
                 return yield GlueCore$1({
                     application: "Platform",
                     gateway: { webPlatform: { port } },
-                    logger: "trace"
+                    logger: logLevel
                 });
             });
         }
@@ -19557,9 +19758,9 @@
             this.clients = {};
             this.unLoadStarted = false;
         }
-        start() {
+        start(config) {
             return __awaiter(this, void 0, void 0, function* () {
-                yield this.gateway.start();
+                yield this.gateway.start(config);
                 this.setUpGenericMessageHandler();
                 this.setUpBeforeUnload();
             });
@@ -19646,55 +19847,6 @@
         }
     }
 
-    const PromiseWrap$1 = (promise, timeoutMilliseconds, timeoutMessage) => {
-        return new Promise((resolve, reject) => {
-            let promiseActive = true;
-            const timeout = setTimeout(() => {
-                if (!promiseActive) {
-                    return;
-                }
-                promiseActive = false;
-                const message = timeoutMessage || `Promise timeout hit: ${timeoutMilliseconds}`;
-                reject(message);
-            }, timeoutMilliseconds);
-            promise()
-                .then((result) => {
-                if (!promiseActive) {
-                    return;
-                }
-                promiseActive = false;
-                clearTimeout(timeout);
-                resolve(result);
-            })
-                .catch((error) => {
-                if (!promiseActive) {
-                    return;
-                }
-                promiseActive = false;
-                clearTimeout(timeout);
-                reject(error);
-            });
-        });
-    };
-    const PromisePlus$3 = (executor, timeoutMilliseconds, timeoutMessage) => {
-        return new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                const message = timeoutMessage || `Promise timeout hit: ${timeoutMilliseconds}`;
-                reject(message);
-            }, timeoutMilliseconds);
-            const providedPromise = new Promise(executor);
-            providedPromise
-                .then((result) => {
-                clearTimeout(timeout);
-                resolve(result);
-            })
-                .catch((error) => {
-                clearTimeout(timeout);
-                reject(error);
-            });
-        });
-    };
-
     const windowOperationDecoder = oneOf$1(constant$1("openWindow"), constant$1("windowHello"), constant$1("getUrl"), constant$1("getTitle"), constant$1("setTitle"), constant$1("moveResize"), constant$1("focus"), constant$1("close"), constant$1("getBounds"), constant$1("registerWorkspaceWindow"), constant$1("unregisterWorkspaceWindow"));
     const windowOpenSettingsDecoder$1 = object$1({
         top: optional$1(number$1()),
@@ -19740,45 +19892,8 @@
     });
     const windowTitleConfigDecoder$1 = object$1({
         windowId: nonEmptyStringDecoder$1,
-        title: nonEmptyStringDecoder$1
+        title: string$1()
     });
-
-    const getRelativeBounds = (rect, relativeTo, relativeDirection) => {
-        const edgeDistance = 0;
-        if (relativeDirection === "bottom") {
-            return {
-                left: relativeTo.left,
-                top: relativeTo.top + relativeTo.height + edgeDistance,
-                width: relativeTo.width,
-                height: rect.height
-            };
-        }
-        if (relativeDirection === "top") {
-            return {
-                left: relativeTo.left,
-                top: relativeTo.top - rect.height - edgeDistance,
-                width: relativeTo.width,
-                height: rect.height
-            };
-        }
-        if (relativeDirection === "right") {
-            return {
-                left: relativeTo.left + relativeTo.width + edgeDistance,
-                top: relativeTo.top,
-                width: rect.width,
-                height: relativeTo.height
-            };
-        }
-        if (relativeDirection === "left") {
-            return {
-                left: relativeTo.left - rect.width - edgeDistance,
-                top: relativeTo.top,
-                width: rect.width,
-                height: relativeTo.height
-            };
-        }
-        throw new Error("invalid relativeDirection");
-    };
 
     const workspacesOperationDecoder = oneOf$1(constant$1("isWindowInWorkspace"), constant$1("createWorkspace"), constant$1("getAllFramesSummaries"), constant$1("getFrameSummary"), constant$1("getAllWorkspacesSummaries"), constant$1("getWorkspaceSnapshot"), constant$1("getAllLayoutsSummaries"), constant$1("openWorkspace"), constant$1("deleteLayout"), constant$1("saveLayout"), constant$1("importLayout"), constant$1("exportAllLayouts"), constant$1("restoreItem"), constant$1("maximizeItem"), constant$1("focusItem"), constant$1("closeItem"), constant$1("resizeItem"), constant$1("moveFrame"), constant$1("getFrameSnapshot"), constant$1("forceLoadWindow"), constant$1("ejectWindow"), constant$1("setItemTitle"), constant$1("moveWindowTo"), constant$1("addWindow"), constant$1("addContainer"), constant$1("bundleWorkspace"), constant$1("changeFrameState"), constant$1("getFrameState"), constant$1("frameHello"));
     const frameHelloDecoder = object$1({
@@ -20087,10 +20202,11 @@
     });
 
     class WindowsController$1 {
-        constructor(glueController, sessionController, stateController) {
+        constructor(glueController, sessionController, stateController, ioc) {
             this.glueController = glueController;
             this.sessionController = sessionController;
             this.stateController = stateController;
+            this.ioc = ioc;
             this.started = false;
             this.operations = {
                 openWindow: { name: "openWindow", execute: this.openWindow.bind(this), dataDecoder: openWindowConfigDecoder$1 },
@@ -20326,11 +20442,13 @@
             });
         }
         handleClose(data, commandId) {
-            var _a, _b, _c;
+            var _a, _b, _c, _d;
             return __awaiter(this, void 0, void 0, function* () {
                 const workspaceClient = this.sessionController.getWorkspaceClientById(data.windowId);
                 if (workspaceClient) {
-                    throw new Error("Use workspaces controller");
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] this window is detected as a workspace window, closing via the workspaces controller`);
+                    yield this.ioc.workspacesController.closeItem({ itemId: data.windowId }, commandId);
+                    return;
                 }
                 const windowData = this.sessionController.getWindowDataById(data.windowId);
                 if (!windowData) {
@@ -20339,10 +20457,10 @@
                 if (windowData.name === "Platform") {
                     throw new Error("Closing the main application is not allowed");
                 }
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling a close request for window ${data.windowId}`);
-                (_b = window.open(undefined, windowData.windowId)) === null || _b === void 0 ? void 0 : _b.close();
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] handling a close request for window ${data.windowId}`);
+                (_c = window.open(undefined, windowData.windowId)) === null || _c === void 0 ? void 0 : _c.close();
                 this.cleanUpWindow(windowData.windowId);
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] window ${data.windowId} has been closed, removed from session, state and announced`);
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] window ${data.windowId} has been closed, removed from session, state and announced`);
             });
         }
         getStartingBounds(config, commandId) {
@@ -20380,10 +20498,11 @@
         constructor() {
             this.windowsNamespace = "g42_core_windows";
             this.instancesNamespace = "g42_core_instances";
-            this.bridgeInstancesNamespace = "g42_core_instances_bridge";
+            this.bridgeInstancesNamespace = "g42_core_bridge";
             this.nonGlueNamespace = "g42_core_nonglue";
             this.workspaceWindowsNamespace = "g42_core_workspace_clients";
             this.workspaceFramesNamespace = "g42_core_workspace_frames";
+            this.layoutNamespace = "g42_core_layouts";
             this.sessionStorage = window.sessionStorage;
             [
                 this.bridgeInstancesNamespace,
@@ -20391,7 +20510,8 @@
                 this.instancesNamespace,
                 this.nonGlueNamespace,
                 this.workspaceWindowsNamespace,
-                this.workspaceFramesNamespace
+                this.workspaceFramesNamespace,
+                this.layoutNamespace
             ].forEach((namespace) => {
                 const data = this.sessionStorage.getItem(namespace);
                 if (!data) {
@@ -20401,6 +20521,13 @@
         }
         get logger() {
             return logger.get("session.storage");
+        }
+        getLayoutSnapshot() {
+            const snapsString = JSON.parse(this.sessionStorage.getItem(this.layoutNamespace));
+            return { layouts: snapsString };
+        }
+        saveLayoutSnapshot(snapshot) {
+            this.sessionStorage.setItem(this.layoutNamespace, JSON.stringify(snapshot.layouts));
         }
         saveFrameData(frameData) {
             const allData = JSON.parse(this.sessionStorage.getItem(this.workspaceFramesNamespace));
@@ -20820,7 +20947,14 @@
                     this.setLock(instance.id);
                 }
                 yield this.notifyWindows(instance, config.context, childWindow);
-                yield PromiseWrap$1(() => { var _a; return (_a = this.locks[instance.id]) === null || _a === void 0 ? void 0 : _a.keyOne; }, this.applicationStartTimeoutMs, `Application start for ${config.name} timed out waiting for client to initialize Glue`);
+                if (this.locks[instance.id]) {
+                    try {
+                        yield PromiseWrap$1(() => { var _a; return (_a = this.locks[instance.id]) === null || _a === void 0 ? void 0 : _a.keyOne; }, this.applicationStartTimeoutMs);
+                    }
+                    catch (error) {
+                        throw new Error(`Application start for ${config.name} timed out waiting for client to initialize Glue`);
+                    }
+                }
                 (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] the windows controller has been successfully notified`);
                 const processConfig = {
                     data: instance,
@@ -20868,12 +21002,14 @@
             });
         }
         handleInstanceStop(inst, commandId) {
-            var _a, _b, _c;
+            var _a, _b, _c, _d;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling stop command for instance: ${inst.id}`);
                 const workspaceClient = this.sessionStorage.getWorkspaceClientById(inst.id);
                 if (workspaceClient) {
-                    throw new Error("Use workspace controller");
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] this instance is detected as a workspace window, closing via the workspaces controller`);
+                    yield this.ioc.workspacesController.closeItem({ itemId: inst.id }, commandId);
+                    return;
                 }
                 const instanceData = this.sessionStorage.getInstanceData(inst.id);
                 if (!instanceData) {
@@ -20886,10 +21022,10 @@
                 if (windowData.name === "Platform") {
                     throw new Error("Closing the main application is not allowed");
                 }
-                (_b = window.open(undefined, windowData.windowId)) === null || _b === void 0 ? void 0 : _b.close();
+                (_c = window.open(undefined, windowData.windowId)) === null || _c === void 0 ? void 0 : _c.close();
                 this.processInstanceClosed(inst.id);
                 this.ioc.windowsController.cleanUpWindow(inst.id);
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] instance ${inst.id} has been closed, removed from store, announced stopped and notified windows, responding to caller`);
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] instance ${inst.id} has been closed, removed from store, announced stopped and notified windows, responding to caller`);
             });
         }
         setLock(id) {
@@ -21031,7 +21167,7 @@
             };
         }
         pollForDefinitions(getDefs, intervalMs, timeoutMs = defaultFetchTimeoutMs) {
-            var _a, _b, _c, _d;
+            var _a, _b, _c, _d, _e;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("polling for new definitions");
                 let parsedDefinitions;
@@ -21044,37 +21180,26 @@
                     this.pollForDefinitions(getDefs, timeoutMs, intervalMs);
                     return;
                 }
-                const removedDefinitionNames = [];
-                for (let definition of this.applications) {
-                    const idxInParsed = parsedDefinitions.findIndex((def) => def.name === definition.name);
-                    if (idxInParsed < 0) {
-                        removedDefinitionNames.push(definition.name);
+                for (const definition of parsedDefinitions) {
+                    const defCurrentIdx = this.applications.findIndex((app) => app.name === definition.name);
+                    if (defCurrentIdx < 0) {
+                        (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`new definition: ${definition.name} detected, adding and announcing`);
+                        this.emitStreamData("applicationAdded", definition);
                         continue;
                     }
-                    const newDefinition = parsedDefinitions[idxInParsed];
-                    const areSame = JSON.stringify(newDefinition) === JSON.stringify(definition);
-                    if (!areSame) {
-                        definition = newDefinition;
-                        (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`change detected at definition ${definition.name}`);
+                    if (!objEqual(definition, this.applications[defCurrentIdx])) {
+                        (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`change detected at definition ${definition.name}`);
                         this.emitStreamData("applicationChanged", definition);
                     }
-                    parsedDefinitions.splice(idxInParsed, 1);
+                    this.applications.splice(defCurrentIdx, 1);
                 }
-                removedDefinitionNames.forEach((name) => {
+                this.applications.forEach((app) => {
                     var _a;
-                    const idxToRemove = this.applications.findIndex((app) => app.name === name);
-                    const removed = this.applications[idxToRemove];
-                    this.applications.splice(idxToRemove, 1);
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`definition ${removed.name} missing, removing and announcing`);
-                    this.emitStreamData("applicationRemoved", removed);
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`definition ${app.name} missing, removing and announcing`);
+                    this.emitStreamData("applicationRemoved", app);
                 });
-                parsedDefinitions.forEach((def) => {
-                    var _a;
-                    this.applications.push(def);
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`new definition: ${def.name} detected, adding and announcing`);
-                    this.emitStreamData("applicationAdded", def);
-                });
-                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace("poll completed, setting next");
+                this.applications = parsedDefinitions;
+                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace("poll completed, setting next");
                 yield this.wait(intervalMs);
                 this.pollForDefinitions(getDefs, timeoutMs, intervalMs);
             });
@@ -21351,37 +21476,189 @@
 
     class RemoteLayoutsMode {
         setup(config) {
-            throw new Error("Method not implemented.");
+            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
         }
         onLayoutEvent(callback) {
-            throw new Error("Method not implemented.");
+            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
         }
         getAll(type) {
-            throw new Error("Method not implemented.");
+            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
         }
         save(layouts) {
-            throw new Error("Method not implemented.");
+            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
         }
         delete(name, type) {
-            throw new Error("Method not implemented.");
+            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
         }
     }
 
+    class AsyncIntervals {
+        constructor() {
+            this.intervalsLookup = {};
+        }
+        set(callback, interval, immediateStart = true) {
+            if (callback && typeof callback === "function") {
+                const intervalId = shortid$1.generate();
+                this.intervalsLookup[intervalId] = true;
+                this.runAsyncInterval(callback, interval, intervalId, immediateStart);
+                return intervalId;
+            }
+            else {
+                throw new Error("Callback must be a function");
+            }
+        }
+        clear(id) {
+            delete this.intervalsLookup[id];
+        }
+        runAsyncInterval(callback, interval, intervalId, execute) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!this.intervalsLookup[intervalId]) {
+                    return;
+                }
+                if (execute) {
+                    yield callback();
+                }
+                if (this.intervalsLookup[intervalId]) {
+                    setTimeout(() => this.runAsyncInterval(callback, interval, intervalId, true), interval);
+                }
+            });
+        }
+    }
+    var asyncIntervals = new AsyncIntervals();
+
     class SupplierLayoutsMode {
+        constructor(sessionController) {
+            this.sessionController = sessionController;
+            this.registry = lib$4();
+        }
+        get logger() {
+            return logger.get("layouts.supplier");
+        }
         setup(config) {
-            throw new Error("Method not implemented.");
+            var _a, _b, _c, _d, _e, _f;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("setting up supplier mode for layouts");
+                if (!config.supplier) {
+                    throw new Error("Cannot set up a supplier mode for layouts, because there is not supplier provided");
+                }
+                if (!config.supplier.save || !config.supplier.delete) {
+                    throw new Error("Cannot set up a supplier mode for layouts, because the provided supplier is missing either a save or delete methods or both0");
+                }
+                this.supplier = config.supplier;
+                this.pollMs = (_b = config.supplier.pollingInterval) !== null && _b !== void 0 ? _b : 30000;
+                this.supplierTimeoutMs = (_c = config.supplier.timeout) !== null && _c !== void 0 ? _c : 10000;
+                try {
+                    yield this.nativeChangeDetection();
+                }
+                catch (error) {
+                    let errorMessage;
+                    if (error && error.stack && error.message) {
+                        errorMessage = error.message;
+                    }
+                    else {
+                        errorMessage = JSON.stringify(error);
+                    }
+                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`Cannot initiate Layouts, because the provided supplier threw: ${errorMessage}`);
+                    throw new Error(`Cannot initiate Layouts, because the provided supplier threw: ${errorMessage}`);
+                }
+                if (this.supplier.pollingInterval) {
+                    (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace("activating polling, because poll interval was specified");
+                    this.startInterval();
+                }
+                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace("supplier mode is completed, initial poll was successful.");
+            });
         }
         onLayoutEvent(callback) {
-            throw new Error("Method not implemented.");
+            return this.registry.add("layoutEvent", callback);
         }
         getAll(type) {
-            throw new Error("Method not implemented.");
+            return __awaiter(this, void 0, void 0, function* () {
+                this.stopInterval();
+                yield this.doChangeDetection();
+                this.startInterval();
+                return this.sessionController.getLayoutSnapshot().layouts;
+            });
         }
         save(layouts) {
-            throw new Error("Method not implemented.");
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!this.supplier.save) {
+                    throw new Error("Cannot proceed save to supplier request, because the saved supplier does not have a save method");
+                }
+                this.stopInterval();
+                this.supplier.save(layouts);
+                yield this.doChangeDetection();
+                this.startInterval();
+            });
         }
         delete(name, type) {
-            throw new Error("Method not implemented.");
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!this.supplier.delete) {
+                    throw new Error("Cannot proceed delete to supplier request, because the saved supplier does not have a delete method");
+                }
+                this.stopInterval();
+                const layoutToDelete = this.sessionController.getLayoutSnapshot().layouts.find((l) => l.name === name && l.type === type);
+                if (!layoutToDelete) {
+                    return false;
+                }
+                yield this.supplier.delete([layoutToDelete]);
+                yield this.doChangeDetection();
+                const isDeleted = this.sessionController.getLayoutSnapshot().layouts.every((l) => l.name !== name && l.type !== type);
+                this.startInterval();
+                return isDeleted;
+            });
+        }
+        doChangeDetection() {
+            return this.nativeChangeDetection()
+                .catch((error) => {
+                var _a;
+                let errorMessage;
+                if (error && error.stack && error.message) {
+                    errorMessage = error.message;
+                }
+                else {
+                    errorMessage = JSON.stringify(error);
+                }
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`Supplier change detection error during building snapshot: ${errorMessage}`);
+            });
+        }
+        startInterval() {
+            return __awaiter(this, void 0, void 0, function* () {
+                this.currentIntervalId = asyncIntervals.set(this.doChangeDetection.bind(this), this.pollMs, false);
+            });
+        }
+        stopInterval() {
+            if (this.currentIntervalId) {
+                asyncIntervals.clear(this.currentIntervalId);
+                delete this.currentIntervalId;
+            }
+        }
+        nativeChangeDetection() {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                const supplierSnapshot = yield PromiseWrap$1(this.supplier.fetch.bind(this), this.supplierTimeoutMs, "The provided supplied timed out when fetching new layouts");
+                supplierSnapshot.forEach((layout) => glueLayoutDecoder$1.runWithException(layout));
+                const snapshot = this.sessionController.getLayoutSnapshot();
+                for (const layout of supplierSnapshot) {
+                    const layoutCurrentIdx = snapshot.layouts.findIndex((l) => l.name === layout.name && l.type === layout.type);
+                    if (layoutCurrentIdx < 0) {
+                        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`new layout: ${layout.name} - ${layout.type} detected, adding and announcing`);
+                        this.registry.execute("layoutEvent", { operation: "layoutAdded", data: layout });
+                        continue;
+                    }
+                    if (!objEqual(layout, snapshot.layouts[layoutCurrentIdx])) {
+                        (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`change detected at layout ${layout.name} - ${layout.type}`);
+                        this.registry.execute("layoutEvent", { operation: "layoutChanged", data: layout });
+                    }
+                    snapshot.layouts.splice(layoutCurrentIdx, 1);
+                }
+                snapshot.layouts.forEach((l) => {
+                    var _a;
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`layout ${l.name} - ${l.type} missing, removing and announcing`);
+                    this.registry.execute("layoutEvent", { operation: "layoutRemoved", data: l });
+                });
+                this.sessionController.saveLayoutSnapshot({ layouts: supplierSnapshot });
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace("poll completed, setting next");
+            });
         }
     }
 
@@ -21799,6 +22076,23 @@
         handleWorkspaceEvent(data) {
             this.glueController.pushWorkspacesMessage(data);
         }
+        closeItem(config, commandId) {
+            var _a, _b, _c, _d, _e, _f;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling closeItem request with config ${JSON.stringify(config)}`);
+                const frameToFocus = this.framesController.getAll().find((frame) => frame.windowId === config.itemId);
+                if (frameToFocus) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] this is targeted at a frame, closing the frame`);
+                    (_c = window.open(undefined, frameToFocus.windowId)) === null || _c === void 0 ? void 0 : _c.close();
+                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] the frame window is closed`);
+                    return;
+                }
+                const frame = yield this.framesController.getFrameInstance(config);
+                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                yield this.glueController.callFrame(this.operations.closeItem, config, frame.windowId);
+                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
         handleFrameHello(config, commandId) {
             var _a;
             return __awaiter(this, void 0, void 0, function* () {
@@ -21974,24 +22268,27 @@
                 (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
             });
         }
-        closeItem(config, commandId) {
-            var _a, _b, _c;
-            return __awaiter(this, void 0, void 0, function* () {
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling closeItem request with config ${JSON.stringify(config)}`);
-                const frame = yield this.framesController.getFrameInstance(config);
-                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
-                yield this.glueController.callFrame(this.operations.closeItem, config, frame.windowId);
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
-            });
-        }
         resizeItem(config, commandId) {
-            var _a, _b, _c;
+            var _a, _b, _c, _d, _e;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling resizeItem request with config ${JSON.stringify(config)}`);
+                const targetedFrame = this.framesController.getAll().find((fr) => fr.windowId === config.itemId);
+                if (targetedFrame) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] detected targeted item is frame, building window resize config`);
+                    const resizeConfig = {
+                        windowId: config.itemId,
+                        width: config.width,
+                        height: config.height,
+                        relative: config.relative
+                    };
+                    yield this.glueController.callWindow(this.ioc.windowsController.moveResizeOperation, resizeConfig, targetedFrame.windowId);
+                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] window resize responded with success, returning to caller`);
+                    return;
+                }
                 const frame = yield this.framesController.getFrameInstance(config);
-                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] targeted item is not a frame, it is located in frame ${frame.windowId}`);
                 yield this.glueController.callFrame(this.operations.resizeItem, config, frame.windowId);
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
             });
         }
         getFrameSnapshot(config, commandId) {
@@ -22286,7 +22583,7 @@
         }
         get windowsController() {
             if (!this._windowsController) {
-                this._windowsController = new WindowsController$1(this.glueController, this.sessionController, this.stateController);
+                this._windowsController = new WindowsController$1(this.glueController, this.sessionController, this.stateController, this);
             }
             return this._windowsController;
         }
@@ -22328,7 +22625,7 @@
         }
         get supplierLayoutsMode() {
             if (!this._supplierLayoutsMode) {
-                this._supplierLayoutsMode = new SupplierLayoutsMode();
+                this._supplierLayoutsMode = new SupplierLayoutsMode(this.sessionController);
             }
             return this._supplierLayoutsMode;
         }

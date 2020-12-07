@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,69 +8,101 @@
     <script src="./platform.web.umd.js"></script>
     <script src="./workspaces.umd.js"></script>
 </head>
-<body>  
+
+<body>
     <h1>Main</h1>
 </body>
+
 <script>
-    const config = {
-        glue: {
-            libraries: [GlueWorkspaces]
-        },
-        applications: {
-            mode: "local",
-            local: [
-                {
-                    name: "SimpleOne",
-                    details: {
-                        url: "http://localhost:9200/"
-                    },
-                    includeInWorkspaces: true
+    // POSSIBLE APPLICATIONS CONFIG:
+
+    const applications = {
+        mode: "local",
+        local: [
+            {
+                name: "SimpleOne",
+                details: {
+                    url: "http://localhost:9200/"
                 },
-                {
-                    name: "SimpleTwo",
-                    details: {
-                        url: "http://localhost:9100/"
-                    },
-                    includeInWorkspaces: true
-                },
-                {
-                    name: "SimpleThree",
-                    details: {
-                        url: "http://dir.bg"
-                    },
+                customProperties: {
                     includeInWorkspaces: true
                 }
-            ]
-        },
-        workspaces: {
-            src: "http://localhost:9300/"
-        }
+            }
+        ]
     }
 
-    // const config = {
-    //     applications: {
-    //         mode: "remote",
-    //         remote: {
-    //             url: "http://localhost:4224/api/glue-apps",
-    //             pollingInterval: 5000
-    //         }
+    // const applications = {
+    //     mode: "remote",
+    //     remote: {
+    //         url: "http://localhost:4224/api/glue-apps",
+    //         pollingInterval: 10000,
+    //         requestTimeout: 5000
     //     }
     // }
 
-    // const config = {
-    //     applications: {
-    //         mode: "supplier",
-    //         supplier: {
-    //             fetch: async () => {
-    //                 const response = await fetch("http://localhost:4224/api/glue-apps")
-    //                 const parsed = await response.json();
+    // const applications = {
+    //     mode: "supplier",
+    //     supplier: {
+    //         fetch: async () => {
+    //             const response = await fetch("http://localhost:4224/api/glue-apps")
+    //             const parsed = await response.json();
 
-    //                 return parsed.applications;
-    //             },
-    //             pollingInterval: 3000
-    //         }
+    //             return parsed.applications;
+    //         },
+    //         pollingInterval: 3000
     //     }
     // }
+
+
+    // POSSIBLE LAYOUTS CONFIG:
+
+    const layouts = {
+        mode: "local",
+        local: [
+            { "name": "example", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} }
+        ]
+    }
+
+    // const layouts = {
+    //     mode: "remote",
+    //     remote: {
+    //         url: "http://localhost:4224/api/glue-layouts",
+    //         pollingInterval: 10000,
+    //         requestTimeout: 5000
+    //     }
+    // }
+
+    // const layouts = {
+    //     mode: "supplier",
+    //     supplier: {
+    //         fetch: async () => {
+    //             const response = await fetch("http://localhost:4224/api/glue-layouts")
+    //             const parsed = await response.json();
+
+    //             return parsed.applications;
+    //         },
+    //         save: async () => {
+    //             console.log("fake saving - does not really save anywhere");
+    //         },
+    //         delete: async () => {
+    //             console.log("fake deleting - does not really delete from anywhere");
+    //         },
+    //         pollingInterval: 10000,
+    //         timeout: 5000
+    //     }
+    // }
+
+    const config = {
+        glue: {
+            libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
+            systemLogger: { level: "warn" }, // you can set this to trace for maximum console output,
+        },
+        workspaces: {
+            src: "http://localhost:9300/" // this how you enable workspaces for the platform and point to a workspace app, which is actually the frame
+        },
+        layouts,
+        applications
+    }
 
     GlueWebPlatform(config)
         .then((data) => {
@@ -78,4 +111,5 @@
         })
         .catch(console.warn);
 </script>
+
 </html>
