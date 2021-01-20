@@ -738,7 +738,7 @@
          * ```
          */
         Decoder.optional = function (decoder) {
-            return new Decoder(function (json) { return (json === undefined ? ok(undefined) : decoder.decode(json)); });
+            return new Decoder(function (json) { return (json === undefined || json === null ? ok(undefined) : decoder.decode(json)); });
         };
         /**
          * Decoder that attempts to run each decoder in `decoders` and either succeeds
@@ -1045,12 +1045,12 @@
     const baseChildSnapshotConfigDecoder = object({
         frameId: nonEmptyStringDecoder,
         workspaceId: nonEmptyStringDecoder,
-        positionIndex: nonNegativeNumberDecoder
+        positionIndex: number()
     });
     const parentSnapshotConfigDecoder = anyJson();
     const swimlaneWindowSnapshotConfigDecoder = intersection(baseChildSnapshotConfigDecoder, object({
         windowId: optional(nonEmptyStringDecoder),
-        isMaximized: boolean(),
+        isMaximized: optional(boolean()),
         isFocused: boolean(),
         title: optional(string()),
         appName: optional(nonEmptyStringDecoder)
@@ -1107,6 +1107,10 @@
                 children: array(oneOf(rowLayoutItemDecoder, columnLayoutItemDecoder, groupLayoutItemDecoder, windowLayoutItemDecoder))
             })
         }))
+    });
+    const workspacesImportLayoutDecoder = object({
+        layout: workspaceLayoutDecoder,
+        mode: oneOf(constant("replace"), constant("merge"))
     });
     const exportedLayoutsResultDecoder = object({
         layouts: array(workspaceLayoutDecoder)
@@ -1248,7 +1252,7 @@
         openWorkspace: { name: "openWorkspace", argsDecoder: openWorkspaceConfigDecoder, resultDecoder: workspaceSnapshotResultDecoder },
         deleteLayout: { name: "deleteLayout", resultDecoder: voidResultDecoder, argsDecoder: deleteLayoutConfigDecoder },
         saveLayout: { name: "saveLayout", resultDecoder: workspaceLayoutDecoder, argsDecoder: workspaceLayoutSaveConfigDecoder },
-        importLayout: { name: "importLayout", resultDecoder: voidResultDecoder, argsDecoder: workspaceLayoutDecoder },
+        importLayout: { name: "importLayout", resultDecoder: voidResultDecoder, argsDecoder: workspacesImportLayoutDecoder },
         exportAllLayouts: { name: "exportAllLayouts", resultDecoder: exportedLayoutsResultDecoder },
         restoreItem: { name: "restoreItem", argsDecoder: simpleItemConfigDecoder, resultDecoder: voidResultDecoder },
         maximizeItem: { name: "maximizeItem", argsDecoder: simpleItemConfigDecoder, resultDecoder: voidResultDecoder },
@@ -3315,9 +3319,9 @@
                 return yield this.bridge.send(OPERATIONS.saveLayout.name, config);
             });
         }
-        importLayout(layouts) {
+        importLayout(layouts, mode) {
             return __awaiter(this, void 0, void 0, function* () {
-                yield Promise.all(layouts.map((layout) => this.bridge.send(OPERATIONS.importLayout.name, layout)));
+                yield Promise.all(layouts.map((layout) => this.bridge.send(OPERATIONS.importLayout.name, { layout, mode })));
             });
         }
         handleOnSaved(callback) {
@@ -3735,12 +3739,12 @@
                 checkThrowCallback(predicate, true);
                 return controller.exportLayout(predicate);
             }),
-            import: (layouts) => __awaiter(void 0, void 0, void 0, function* () {
+            import: (layouts, mode = "replace") => __awaiter(void 0, void 0, void 0, function* () {
                 if (!Array.isArray(layouts)) {
                     throw new Error(`The provided layouts argument is not an array: ${JSON.stringify(layouts)}`);
                 }
                 layouts.forEach((layout) => workspaceLayoutDecoder.runWithException(layout));
-                return controller.importLayout(layouts);
+                return controller.importLayout(layouts, mode);
             }),
             save: (config) => __awaiter(void 0, void 0, void 0, function* () {
                 const verifiedConfig = workspaceLayoutSaveConfigDecoder.runWithException(config);

@@ -13,14 +13,16 @@
     <h1>Main</h1>
 </body>
 
+<!-- <iframe class="border rounded flex-grow-1" src="http://localhost:9100"></iframe> -->
+
 <script>
     // POSSIBLE APPLICATIONS CONFIG:
 
     const applications = {
-        mode: "local",
         local: [
             {
                 name: "SimpleOne",
+                type: "window",
                 details: {
                     url: "http://localhost:9200/"
                 },
@@ -56,12 +58,13 @@
 
     // POSSIBLE LAYOUTS CONFIG:
 
-    const layouts = {
-        mode: "local",
-        local: [
-            { "name": "example", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} }
-        ]
-    }
+    // const layouts = {
+    //     mode: "session",
+    //     local: [
+    //         { "name": "example", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} },
+    //         { "name": "not-example", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} }
+    //     ]
+    // }
 
     // const layouts = {
     //     mode: "remote",
@@ -92,24 +95,73 @@
     //     }
     // }
 
-    const config = {
-        glue: {
-            libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
-            systemLogger: { level: "warn" }, // you can set this to trace for maximum console output,
-        },
-        workspaces: {
-            src: "http://localhost:9300/" // this how you enable workspaces for the platform and point to a workspace app, which is actually the frame
-        },
-        layouts,
-        applications
-    }
+    // const config = {
+    //     glue: {
+    //         libraries: [GlueWorkspaces],
+    //         systemLogger: { level: "trace" }, // you can set this to trace for maximum console output,
+    //     },
+    //     layouts,
+    //     applications,
+    //     workspaces: {
+    //         src: "http://localhost:9000/workspace"
+    //     }
+    // }
 
-    GlueWebPlatform(config)
+    // let counter = 0;
+
+    // const cleanUp = async () => {
+    //     const frames = await glue.workspaces.getAllFrames();
+    //     await Promise.all(frames.map((frame) => frame.close()));
+    // };
+
+    // const action = async () => {
+    //     const oneWsp = await glue.workspaces.restoreWorkspace("example");
+    //     const twoWsp = await glue.workspaces.restoreWorkspace("example");
+
+    //     await oneWsp.close();
+    // };
+
+    // const testIt = async () => {
+    //     for (const el of Array.from({ length: 1 })) {
+    //         console.log("--------------------S--------------------");
+    //         ++counter;
+    //         await action();
+    //         await cleanUp();
+    //         console.log("--------------------E--------------------");
+    //     }
+    // }
+
+    const configWithPlugins = {
+        applications,
+        plugins: {
+            definitions: [
+                {
+                    name: "first-plugin",
+                    config: { test: 42 },
+                    start: (glue, config) => {
+                        // WebSocket
+                        // fetch
+                        // glue
+                        console.log("works believe me");
+                        console.log(config);
+                        console.log(glue.appManager.applications());
+                    }
+                }
+            ]
+        }
+    };
+
+    GlueWebPlatform(configWithPlugins)
         .then((data) => {
             window.glue = data.glue;
             console.log("done");
+            // return testIt();
         })
-        .catch(console.warn);
+        .then(() => console.log("test done"))
+        .catch((err) => {
+            console.warn(err);
+            console.log(`FAILED AT ${counter}`);
+        });
 </script>
 
 </html>

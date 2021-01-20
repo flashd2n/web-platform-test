@@ -30,7 +30,7 @@
     }
 
     const defaultConfig = {
-        logger: "trace",
+        logger: "info",
         gateway: { webPlatform: {} },
         libraries: []
     };
@@ -38,7 +38,7 @@
         var _a;
         const combined = Object.assign({}, defaultConfig, config);
         if (combined.systemLogger) {
-            combined.logger = (_a = combined.systemLogger.level) !== null && _a !== void 0 ? _a : "trace";
+            combined.logger = (_a = combined.systemLogger.level) !== null && _a !== void 0 ? _a : "info";
         }
         return combined;
     };
@@ -863,9 +863,9 @@
 
     const nonEmptyStringDecoder = string().where((s) => s.length > 0, "Expected a non-empty string");
     const nonNegativeNumberDecoder = number().where((num) => num >= 0, "Expected a non-negative number");
-    const libDomainDecoder = oneOf(constant("windows"), constant("appManager"), constant("layouts"));
+    const libDomainDecoder = oneOf(constant("windows"), constant("appManager"), constant("layouts"), constant("intents"));
     const windowOperationTypesDecoder = oneOf(constant("openWindow"), constant("windowHello"), constant("windowAdded"), constant("windowRemoved"), constant("getBounds"), constant("getUrl"), constant("moveResize"), constant("focus"), constant("close"), constant("getTitle"), constant("setTitle"));
-    const appManagerOperationTypesDecoder = oneOf(constant("appHello"), constant("applicationAdded"), constant("applicationRemoved"), constant("applicationChanged"), constant("instanceStarted"), constant("instanceStopped"), constant("applicationStart"), constant("instanceStop"));
+    const appManagerOperationTypesDecoder = oneOf(constant("appHello"), constant("applicationAdded"), constant("applicationRemoved"), constant("applicationChanged"), constant("instanceStarted"), constant("instanceStopped"), constant("applicationStart"), constant("instanceStop"), constant("clear"));
     const layoutsOperationTypesDecoder = oneOf(constant("layoutAdded"), constant("layoutChanged"), constant("layoutRemoved"), constant("get"), constant("getAll"), constant("export"), constant("import"), constant("remove"));
     const windowRelativeDirectionDecoder = oneOf(constant("top"), constant("left"), constant("right"), constant("bottom"));
     const windowOpenSettingsDecoder = optional(object({
@@ -875,7 +875,8 @@
         height: optional(nonNegativeNumberDecoder),
         context: optional(anyJson()),
         relativeTo: optional(nonEmptyStringDecoder),
-        relativeDirection: optional(windowRelativeDirectionDecoder)
+        relativeDirection: optional(windowRelativeDirectionDecoder),
+        windowId: optional(nonEmptyStringDecoder)
     }));
     const openWindowConfigDecoder = object({
         name: nonEmptyStringDecoder,
@@ -932,8 +933,61 @@
         id: nonEmptyStringDecoder,
         applicationName: nonEmptyStringDecoder
     });
+    const applicationDetailsDecoder = object({
+        url: nonEmptyStringDecoder,
+        top: optional(number()),
+        left: optional(number()),
+        width: optional(nonNegativeNumberDecoder),
+        height: optional(nonNegativeNumberDecoder)
+    });
+    const intentDefinitionDecoder = object({
+        name: nonEmptyStringDecoder,
+        displayName: optional(string()),
+        contexts: optional(array(string())),
+        customConfig: optional(object())
+    });
+    const fdc3AppDefinitionDecoder = object({
+        name: nonEmptyStringDecoder,
+        title: optional(nonEmptyStringDecoder),
+        version: optional(nonEmptyStringDecoder),
+        appId: nonEmptyStringDecoder,
+        manifest: nonEmptyStringDecoder,
+        manifestType: nonEmptyStringDecoder,
+        tooltip: optional(nonEmptyStringDecoder),
+        description: optional(nonEmptyStringDecoder),
+        contactEmail: optional(nonEmptyStringDecoder),
+        supportEmail: optional(nonEmptyStringDecoder),
+        publisher: optional(nonEmptyStringDecoder),
+        images: optional(array(object({ url: optional(nonEmptyStringDecoder) }))),
+        icons: optional(array(object({ icon: optional(nonEmptyStringDecoder) }))),
+        customConfig: anyJson(),
+        intents: optional(array(intentDefinitionDecoder))
+    });
+    const applicationDefinitionDecoder = object({
+        name: nonEmptyStringDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
+        title: optional(nonEmptyStringDecoder),
+        version: optional(nonEmptyStringDecoder),
+        customProperties: optional(anyJson()),
+        icon: optional(nonEmptyStringDecoder),
+        caption: optional(nonEmptyStringDecoder),
+        details: applicationDetailsDecoder,
+        intents: optional(array(intentDefinitionDecoder))
+    });
+    const allApplicationDefinitionsDecoder = oneOf(applicationDefinitionDecoder, fdc3AppDefinitionDecoder);
+    const appsImportOperationDecoder = object({
+        definitions: array(allApplicationDefinitionsDecoder),
+        mode: oneOf(constant("replace"), constant("merge"))
+    });
+    const appRemoveConfigDecoder = object({
+        name: nonEmptyStringDecoder
+    });
+    const appsExportOperationDecoder = object({
+        definitions: array(applicationDefinitionDecoder)
+    });
     const applicationDataDecoder = object({
         name: nonEmptyStringDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
         instances: array(instanceDataDecoder),
         userProperties: optional(anyJson()),
         title: optional(nonEmptyStringDecoder),
@@ -943,6 +997,7 @@
     });
     const baseApplicationDataDecoder = object({
         name: nonEmptyStringDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
         userProperties: anyJson(),
         title: optional(nonEmptyStringDecoder),
         version: optional(nonEmptyStringDecoder),
@@ -958,6 +1013,7 @@
     const applicationStartConfigDecoder = object({
         name: nonEmptyStringDecoder,
         waitForAGMReady: boolean(),
+        id: optional(nonEmptyStringDecoder),
         context: optional(anyJson()),
         top: optional(number()),
         left: optional(number()),
@@ -1015,6 +1071,7 @@
         name: nonEmptyStringDecoder,
         type: layoutTypeDecoder,
         components: array(oneOf(windowLayoutComponentDecoder, workspaceLayoutComponentDecoder)),
+        version: optional(nonEmptyStringDecoder),
         context: optional(anyJson()),
         metadata: optional(anyJson())
     });
@@ -1044,6 +1101,11 @@
     const allLayoutsFullConfigDecoder = object({
         layouts: array(glueLayoutDecoder)
     });
+    const importModeDecoder = oneOf(constant("replace"), constant("merge"));
+    const layoutsImportConfigDecoder = object({
+        layouts: array(glueLayoutDecoder),
+        mode: importModeDecoder
+    });
     const allLayoutsSummariesResultDecoder = object({
         summaries: array(layoutSummaryDecoder)
     });
@@ -1053,6 +1115,65 @@
     const optionalSimpleLayoutResult = object({
         layout: optional(glueLayoutDecoder)
     });
+    const intentsOperationTypesDecoder = oneOf(constant("findIntent"), constant("getIntents"), constant("raiseIntent"));
+    const intentHandlerDecoder = object({
+        applicationName: nonEmptyStringDecoder,
+        applicationTitle: string(),
+        applicationDescription: optional(string()),
+        applicationIcon: optional(string()),
+        type: oneOf(constant("app"), constant("instance")),
+        displayName: optional(string()),
+        contextTypes: optional(array(nonEmptyStringDecoder)),
+        instanceId: optional(string()),
+        instanceTitle: optional(string())
+    });
+    const intentDecoder = object({
+        name: nonEmptyStringDecoder,
+        handlers: array(intentHandlerDecoder)
+    });
+    const intentTargetDecoder = oneOf(constant("startNew"), constant("reuse"), object({
+        app: optional(nonEmptyStringDecoder),
+        instance: optional(nonEmptyStringDecoder)
+    }));
+    const intentContextDecoder = object({
+        type: optional(nonEmptyStringDecoder),
+        data: optional(object())
+    });
+    const intentsDecoder = array(intentDecoder);
+    const wrappedIntentsDecoder = object({
+        intents: intentsDecoder
+    });
+    const intentFilterDecoder = object({
+        name: optional(nonEmptyStringDecoder),
+        contextType: optional(nonEmptyStringDecoder)
+    });
+    const findFilterDecoder = oneOf(nonEmptyStringDecoder, intentFilterDecoder);
+    const wrappedIntentFilterDecoder = object({
+        filter: optional(intentFilterDecoder)
+    });
+    const intentRequestDecoder = object({
+        intent: nonEmptyStringDecoder,
+        target: optional(intentTargetDecoder),
+        context: optional(intentContextDecoder),
+        options: optional(windowOpenSettingsDecoder)
+    });
+    const raiseRequestDecoder = oneOf(nonEmptyStringDecoder, intentRequestDecoder);
+    const intentResultDecoder = object({
+        request: intentRequestDecoder,
+        handler: intentHandlerDecoder,
+        result: anyJson()
+    });
+    const addIntentListenerRequestDecoder = object({
+        intent: nonEmptyStringDecoder,
+        contextTypes: optional(array(nonEmptyStringDecoder)),
+        displayName: optional(string()),
+        icon: optional(string()),
+        description: optional(string())
+    });
+    const addIntentListenerIntentDecoder = oneOf(nonEmptyStringDecoder, addIntentListenerRequestDecoder);
+    const channelNameDecoder = (channelNames) => {
+        return nonEmptyStringDecoder.where(s => channelNames.includes(s), "Expected a valid channel name");
+    };
 
     const operations = {
         openWindow: { name: "openWindow", dataDecoder: openWindowConfigDecoder, resultDecoder: coreWindowDataDecoder },
@@ -1322,7 +1443,7 @@
         }
         onContextUpdated(callback) {
             if (typeof callback !== "function") {
-                throw new Error("Cannot subscribe to context changes, because the provided callback is not a function");
+                throw new Error("Cannot subscribe to context changes, because the provided callback is not a function!");
             }
             const wrappedCallback = (data) => {
                 callback(data, this.me);
@@ -1409,9 +1530,15 @@
             return Object.assign({}, this.me);
         }
         onWindowAdded(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to window added, because the provided callback is not a function!");
+            }
             return this.registry.add("window-added", callback);
         }
         onWindowRemoved(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to window removed, because the provided callback is not a function!");
+            }
             return this.registry.add("window-removed", callback);
         }
         sayHello() {
@@ -1499,7 +1626,7 @@
                     config.relative ? 0 : window.innerWidth;
                 const moveMethod = config.relative ? window.moveBy : window.moveTo;
                 const resizeMethod = config.relative ? window.resizeBy : window.resizeTo;
-                moveMethod(targetTop, targetLeft);
+                moveMethod(targetLeft, targetTop);
                 resizeMethod(targetWidth, targetHeight);
             });
         }
@@ -1696,7 +1823,11 @@
         instanceStarted: { name: "instanceStarted", dataDecoder: instanceDataDecoder },
         instanceStopped: { name: "instanceStopped", dataDecoder: instanceDataDecoder },
         applicationStart: { name: "applicationStart", dataDecoder: applicationStartConfigDecoder, resultDecoder: instanceDataDecoder },
-        instanceStop: { name: "instanceStop", dataDecoder: basicInstanceDataDecoder }
+        instanceStop: { name: "instanceStop", dataDecoder: basicInstanceDataDecoder },
+        import: { name: "import" },
+        remove: { name: "remove", dataDecoder: appRemoveConfigDecoder },
+        export: { name: "export", resultDecoder: appsExportOperationDecoder },
+        clear: { name: "clear" }
     };
 
     class AppManagerController {
@@ -1737,13 +1868,13 @@
             });
         }
         onInstanceStarted(callback) {
-            return this.registry.add("instance-started", callback);
+            return this.registry.add("instance-started", callback, this.instances);
         }
         onInstanceStopped(callback) {
             return this.registry.add("instance-stopped", callback);
         }
         startApplication(appName, context, options) {
-            var _a;
+            var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 const startOptions = {
                     name: appName,
@@ -1754,7 +1885,8 @@
                     width: options === null || options === void 0 ? void 0 : options.width,
                     height: options === null || options === void 0 ? void 0 : options.height,
                     relativeTo: options === null || options === void 0 ? void 0 : options.relativeTo,
-                    relativeDirection: options === null || options === void 0 ? void 0 : options.relativeDirection
+                    relativeDirection: options === null || options === void 0 ? void 0 : options.relativeDirection,
+                    id: (_b = options) === null || _b === void 0 ? void 0 : _b.reuseId
                 };
                 const openResult = yield this.bridge.send("appManager", operations$1.applicationStart, startOptions);
                 const app = this.applications.find((a) => a.name === openResult.applicationName);
@@ -1764,6 +1896,12 @@
         toApi() {
             const api = {
                 myInstance: this.me,
+                inMemory: {
+                    import: this.import.bind(this),
+                    remove: this.remove.bind(this),
+                    export: this.export.bind(this),
+                    clear: this.clear.bind(this)
+                },
                 application: this.getApplication.bind(this),
                 applications: this.getApplications.bind(this),
                 instances: this.getInstances.bind(this),
@@ -1783,7 +1921,7 @@
             operations$1.instanceStopped.execute = this.handleInstanceStoppedMessage.bind(this);
         }
         onAppAdded(callback) {
-            return this.registry.add("application-added", callback);
+            return this.registry.add("application-added", callback, this.applications);
         }
         onAppRemoved(callback) {
             return this.registry.add("application-removed", callback);
@@ -1796,7 +1934,7 @@
                 if (this.applications.some((app) => app.name === appData.name)) {
                     return;
                 }
-                const app = yield this.ioc.buildApplication(appData);
+                const app = yield this.ioc.buildApplication(appData, []);
                 const instances = this.instances.filter((instance) => instance.application.name === app.name);
                 app.instances.push(...instances);
                 this.applications.push(app);
@@ -1861,6 +1999,46 @@
                 this.registry.execute("instance-stopped", instance);
             });
         }
+        import(definitions, mode = "replace") {
+            return __awaiter(this, void 0, void 0, function* () {
+                importModeDecoder.runWithException(mode);
+                if (!Array.isArray(definitions)) {
+                    throw new Error("Import must be called with an array of definitions");
+                }
+                const parseResult = definitions.reduce((soFar, definition) => {
+                    const decodeResult = allApplicationDefinitionsDecoder.run(definition);
+                    if (!decodeResult.ok) {
+                        soFar.invalid.push({ app: definition === null || definition === void 0 ? void 0 : definition.name, error: JSON.stringify(decodeResult.error) });
+                    }
+                    else {
+                        soFar.valid.push(definition);
+                    }
+                    return soFar;
+                }, { valid: [], invalid: [] });
+                yield this.bridge.send("appManager", operations$1.import, { definitions: parseResult.valid, mode });
+                return {
+                    imported: parseResult.valid.map((valid) => valid.name),
+                    errors: parseResult.invalid
+                };
+            });
+        }
+        remove(name) {
+            return __awaiter(this, void 0, void 0, function* () {
+                nonEmptyStringDecoder.runWithException(name);
+                yield this.bridge.send("appManager", operations$1.remove, { name });
+            });
+        }
+        clear() {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield this.bridge.send("appManager", operations$1.clear, undefined);
+            });
+        }
+        export() {
+            return __awaiter(this, void 0, void 0, function* () {
+                const response = yield this.bridge.send("appManager", operations$1.export, undefined);
+                return response.definitions;
+            });
+        }
         getApplication(name) {
             const verifiedName = nonEmptyStringDecoder.runWithException(name);
             return this.applications.find((app) => app.name === verifiedName);
@@ -1875,7 +2053,7 @@
             return __awaiter(this, void 0, void 0, function* () {
                 const result = yield this.bridge.send("appManager", operations$1.appHello, { windowId: this.actualWindowId });
                 this.logger.trace("the platform responded to the hello message with a full list of apps");
-                this.applications = yield Promise.all(result.apps.map((app) => this.ioc.buildApplication(app)));
+                this.applications = yield Promise.all(result.apps.map((app) => this.ioc.buildApplication(app, app.instances)));
                 this.instances = this.applications.reduce((instancesSoFar, app) => {
                     instancesSoFar.push(...app.instances);
                     return instancesSoFar;
@@ -1944,14 +2122,14 @@
                 onInstanceStarted: this.onInstanceStarted.bind(this),
                 onInstanceStopped: this.onInstanceStopped.bind(this)
             };
-            this.me = Object.freeze(api);
+            this.me = api;
             return this.me;
         }
         onInstanceStarted(callback) {
             if (typeof callback !== "function") {
                 throw new Error("OnInstanceStarted requires a single argument of type function");
             }
-            return this.controller.onInstanceStarted((instance) => {
+            this.controller.onInstanceStarted((instance) => {
                 if (instance.application.name === this.data.name) {
                     callback(instance);
                 }
@@ -1961,7 +2139,7 @@
             if (typeof callback !== "function") {
                 throw new Error("OnInstanceStarted requires a single argument of type function");
             }
-            return this.controller.onInstanceStopped((instance) => {
+            this.controller.onInstanceStopped((instance) => {
                 if (instance.application.name === this.data.name) {
                     callback(instance);
                 }
@@ -1981,7 +2159,7 @@
         get: { name: "get", dataDecoder: simpleLayoutConfigDecoder, resultDecoder: optionalSimpleLayoutResult },
         getAll: { name: "getAll", dataDecoder: getAllLayoutsConfigDecoder, resultDecoder: allLayoutsSummariesResultDecoder },
         export: { name: "export", dataDecoder: getAllLayoutsConfigDecoder, resultDecoder: allLayoutsFullConfigDecoder },
-        import: { name: "import", dataDecoder: allLayoutsFullConfigDecoder },
+        import: { name: "import", dataDecoder: layoutsImportConfigDecoder },
         remove: { name: "remove", dataDecoder: simpleLayoutConfigDecoder }
     };
 
@@ -2058,10 +2236,23 @@
                 return result.layouts;
             });
         }
-        import(layouts) {
+        import(layouts, mode = "replace") {
             return __awaiter(this, void 0, void 0, function* () {
-                layouts.forEach((layout) => glueLayoutDecoder.runWithException(layout));
-                yield this.bridge.send("layouts", operations$2.import, { layouts });
+                importModeDecoder.runWithException(mode);
+                if (!Array.isArray(layouts)) {
+                    throw new Error("Import must be called with an array of layouts");
+                }
+                const parseResult = layouts.reduce((soFar, layout) => {
+                    const decodeResult = glueLayoutDecoder.run(layout);
+                    if (decodeResult.ok) {
+                        soFar.valid.push(layout);
+                    }
+                    else {
+                        this.logger.warn(`A layout with name: ${layout.name} was not imported, because of error: ${JSON.stringify(decodeResult.error)}`);
+                    }
+                    return soFar;
+                }, { valid: [] });
+                yield this.bridge.send("layouts", operations$2.import, { layouts: parseResult.valid, mode });
             });
         }
         save(layout) {
@@ -2162,6 +2353,298 @@
         }
     }
 
+    const operations$3 = {
+        getIntents: { name: "getIntents", resultDecoder: wrappedIntentsDecoder },
+        findIntent: { name: "findIntent", dataDecoder: wrappedIntentFilterDecoder, resultDecoder: wrappedIntentsDecoder },
+        raiseIntent: { name: "raiseIntent", dataDecoder: intentRequestDecoder, resultDecoder: intentResultDecoder }
+    };
+
+    class IntentsController {
+        constructor() {
+            this.myIntents = new Set();
+            this.GlueWebIntentsPrefix = "Tick42.FDC3.Intents.";
+        }
+        start(coreGlue, ioc) {
+            return __awaiter(this, void 0, void 0, function* () {
+                this.logger = coreGlue.logger.subLogger("intents.controller.web");
+                this.logger.trace("starting the web intents controller");
+                this.bridge = ioc.bridge;
+                this.interop = coreGlue.interop;
+                const api = this.toApi();
+                this.logger.trace("no need for platform registration, attaching the intents property to glue and returning");
+                coreGlue.intents = api;
+            });
+        }
+        handleBridgeMessage(args) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const operationName = intentsOperationTypesDecoder.runWithException(args.operation);
+                const operation = operations$3[operationName];
+                if (!operation.execute) {
+                    return;
+                }
+                let operationData = args.data;
+                if (operation.dataDecoder) {
+                    operationData = operation.dataDecoder.runWithException(args.data);
+                }
+                return yield operation.execute(operationData);
+            });
+        }
+        toApi() {
+            const api = {
+                raise: this.raise.bind(this),
+                all: this.all.bind(this),
+                addIntentListener: this.addIntentListener.bind(this),
+                find: this.find.bind(this)
+            };
+            return Object.freeze(api);
+        }
+        raise(request) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const requestObj = raiseRequestDecoder.runWithException(request);
+                let data;
+                if (typeof requestObj === "string") {
+                    data = {
+                        intent: requestObj
+                    };
+                }
+                else {
+                    data = requestObj;
+                }
+                const result = yield this.bridge.send("intents", operations$3.raiseIntent, data);
+                return result;
+            });
+        }
+        all() {
+            return __awaiter(this, void 0, void 0, function* () {
+                const result = yield this.bridge.send("intents", operations$3.getIntents, undefined);
+                return result.intents;
+            });
+        }
+        addIntentListener(intent, handler) {
+            addIntentListenerIntentDecoder.runWithException(intent);
+            if (typeof handler !== "function") {
+                throw new Error("Cannot add intent listener, because the provided handler is not a function!");
+            }
+            let subscribed = true;
+            const intentName = typeof intent === "string" ? intent : intent.intent;
+            const methodName = `${this.GlueWebIntentsPrefix}${intentName}`;
+            const alreadyRegistered = this.myIntents.has(intentName);
+            if (alreadyRegistered) {
+                throw new Error(`Intent listener for intent ${intentName} already registered!`);
+            }
+            this.myIntents.add(intentName);
+            const result = {
+                unsubscribe: () => {
+                    subscribed = false;
+                    try {
+                        this.interop.unregister(methodName);
+                        this.myIntents.delete(intentName);
+                    }
+                    catch (error) {
+                        this.logger.trace(`Unsubscribed intent listener, but ${methodName} unregistration failed!`);
+                    }
+                }
+            };
+            const flags = typeof intent === "string" ? { intent } : intent;
+            this.interop.register({ name: methodName, flags }, (args) => {
+                if (subscribed) {
+                    return handler(args);
+                }
+            });
+            return result;
+        }
+        find(intentFilter) {
+            return __awaiter(this, void 0, void 0, function* () {
+                let data = undefined;
+                if (typeof intentFilter !== "undefined") {
+                    const intentFilterObj = findFilterDecoder.runWithException(intentFilter);
+                    if (typeof intentFilterObj === "string") {
+                        data = {
+                            filter: {
+                                name: intentFilterObj
+                            }
+                        };
+                    }
+                    else if (typeof intentFilterObj === "object") {
+                        data = {
+                            filter: intentFilterObj
+                        };
+                    }
+                }
+                const result = yield this.bridge.send("intents", operations$3.findIntent, data);
+                return result.intents;
+            });
+        }
+    }
+
+    class ChannelsController {
+        constructor() {
+            this.registry = lib();
+            this.GlueWebChannelsPrefix = "___channel___";
+            this.SubsKey = "subs";
+            this.ChangedKey = "changed";
+        }
+        start(coreGlue) {
+            return __awaiter(this, void 0, void 0, function* () {
+                this.logger = coreGlue.logger.subLogger("channels.controller.web");
+                this.logger.trace("starting the web channels controller");
+                this.contexts = coreGlue.contexts;
+                this.logger.trace("no need for platform registration, attaching the channels property to glue and returning");
+                const api = this.toApi();
+                coreGlue.channels = api;
+            });
+        }
+        handleBridgeMessage() {
+            return __awaiter(this, void 0, void 0, function* () {
+            });
+        }
+        toApi() {
+            const api = {
+                subscribe: this.subscribe.bind(this),
+                subscribeFor: this.subscribeFor.bind(this),
+                publish: this.publish.bind(this),
+                all: this.all.bind(this),
+                list: this.list.bind(this),
+                get: this.get.bind(this),
+                join: this.join.bind(this),
+                leave: this.leave.bind(this),
+                current: this.current.bind(this),
+                my: this.my.bind(this),
+                changed: this.changed.bind(this),
+                onChanged: this.onChanged.bind(this),
+                add: this.add.bind(this)
+            };
+            return Object.freeze(api);
+        }
+        createContextName(channelName) {
+            return `${this.GlueWebChannelsPrefix}${channelName}`;
+        }
+        getAllChannelNames() {
+            const contextNames = this.contexts.all();
+            const channelContextNames = contextNames.filter((contextName) => contextName.startsWith(this.GlueWebChannelsPrefix));
+            const channelNames = channelContextNames.map((channelContextName) => channelContextName.replace(this.GlueWebChannelsPrefix, ""));
+            return channelNames;
+        }
+        unsubscribe() {
+            if (this.unsubscribeFunc) {
+                this.unsubscribeFunc();
+                this.unsubscribeFunc = undefined;
+            }
+        }
+        switchToChannel(name) {
+            return __awaiter(this, void 0, void 0, function* () {
+                this.unsubscribe();
+                this.currentChannelName = name;
+                if (typeof name !== "undefined") {
+                    const contextName = this.createContextName(name);
+                    this.unsubscribeFunc = yield this.contexts.subscribe(contextName, (context, _, __, ___, extraData) => {
+                        this.registry.execute(this.SubsKey, context.data, context, extraData === null || extraData === void 0 ? void 0 : extraData.updaterId);
+                    });
+                }
+                this.registry.execute(this.ChangedKey, name);
+            });
+        }
+        updateData(name, data) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const contextName = this.createContextName(name);
+                if (this.contexts.setPathSupported) {
+                    const pathValues = Object.keys(data).map((key) => {
+                        return {
+                            path: `data.${key}`,
+                            value: data[key]
+                        };
+                    });
+                    yield this.contexts.setPaths(contextName, pathValues);
+                }
+                else {
+                    yield this.contexts.update(contextName, { data });
+                }
+            });
+        }
+        subscribe(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to channels, because the provided callback is not a function!");
+            }
+            return this.registry.add(this.SubsKey, callback);
+        }
+        subscribeFor(name, callback) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                channelNameDecoder(channelNames).runWithException(name);
+                if (typeof callback !== "function") {
+                    throw new Error(`Cannot subscribe to channel ${name}, because the provided callback is not a function!`);
+                }
+                const contextName = this.createContextName(name);
+                return this.contexts.subscribe(contextName, (context, _, __, ___, extraData) => {
+                    callback(context.data, context, extraData === null || extraData === void 0 ? void 0 : extraData.updaterId);
+                });
+            });
+        }
+        publish(data, name) {
+            if (typeof data !== "object") {
+                throw new Error("Cannot publish to channel, because the provided data is not an object!");
+            }
+            if (typeof name !== "undefined") {
+                const channelNames = this.getAllChannelNames();
+                channelNameDecoder(channelNames).runWithException(name);
+                return this.updateData(name, data);
+            }
+            if (typeof this.currentChannelName === "undefined") {
+                throw new Error("Cannot publish to channel, because not joined to a channel!");
+            }
+            return this.updateData(this.currentChannelName, data);
+        }
+        all() {
+            return __awaiter(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                return channelNames;
+            });
+        }
+        list() {
+            return __awaiter(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                const channelContexts = yield Promise.all(channelNames.map((channelName) => this.get(channelName)));
+                return channelContexts;
+            });
+        }
+        get(name) {
+            const channelNames = this.getAllChannelNames();
+            channelNameDecoder(channelNames).runWithException(name);
+            const contextName = this.createContextName(name);
+            return this.contexts.get(contextName);
+        }
+        join(name) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                channelNameDecoder(channelNames).runWithException(name);
+                yield this.switchToChannel(name);
+            });
+        }
+        leave() {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield this.switchToChannel();
+            });
+        }
+        current() {
+            return this.currentChannelName;
+        }
+        my() {
+            return this.current();
+        }
+        changed(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to channel changed, because the provided callback is not a function!");
+            }
+            return this.registry.add(this.ChangedKey, callback);
+        }
+        onChanged(callback) {
+            return this.changed(callback);
+        }
+        add(info) {
+            throw new Error("Method `add()` isn't implemented.");
+        }
+    }
+
     class IoC {
         constructor(coreGlue) {
             this.coreGlue = coreGlue;
@@ -2169,7 +2652,9 @@
                 windows: this.windowsController,
                 appManager: this.appManagerController,
                 layouts: this.layoutsController,
-                notifications: this.notificationsController
+                notifications: this.notificationsController,
+                intents: this.intentsController,
+                channels: this.channelsController
             };
         }
         get windowsController() {
@@ -2196,6 +2681,18 @@
             }
             return this._notificationsControllerInstance;
         }
+        get intentsController() {
+            if (!this._intentsControllerInstance) {
+                this._intentsControllerInstance = new IntentsController();
+            }
+            return this._intentsControllerInstance;
+        }
+        get channelsController() {
+            if (!this._channelsControllerInstance) {
+                this._channelsControllerInstance = new ChannelsController();
+            }
+            return this._channelsControllerInstance;
+        }
         get bridge() {
             if (!this._bridgeInstance) {
                 this._bridgeInstance = new GlueBridge(this.coreGlue);
@@ -2209,10 +2706,10 @@
                 return { id, model, api };
             });
         }
-        buildApplication(app) {
+        buildApplication(app, applicationInstances) {
             return __awaiter(this, void 0, void 0, function* () {
                 const application = (new ApplicationModel(app, [], this.appManagerController)).toApi();
-                const instances = app.instances.map((instanceData) => this.buildInstance(instanceData, application));
+                const instances = applicationInstances.map((instanceData) => this.buildInstance(instanceData, application));
                 application.instances.push(...instances);
                 return application;
             });
@@ -2222,6 +2719,8 @@
         }
     }
 
+    var version = "2.0.4";
+
     const createFactoryFunction = (coreFactoryFunction) => {
         return (userConfig) => __awaiter(void 0, void 0, void 0, function* () {
             const config = parseConfig(userConfig);
@@ -2229,7 +2728,7 @@
                 return enterprise(config);
             }
             checkSingleton();
-            const glue = yield PromiseWrap(() => coreFactoryFunction(config), 30000, "Glue Web initialization timed out");
+            const glue = yield PromiseWrap(() => coreFactoryFunction(config, { version }), 30000, "Glue Web initialization timed out, because core didn't resolve");
             const logger = glue.logger.subLogger("web.main.controller");
             const ioc = new IoC(glue);
             yield ioc.bridge.start(ioc.controllers);
@@ -5295,7 +5794,7 @@
         }
     };
 
-    var version = "5.2.8-beta.0";
+    var version$1 = "5.4.0";
 
     function prepareConfig (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -5366,7 +5865,7 @@
                     process: pid,
                     region: region,
                     environment: environment,
-                    api: ext.version || version
+                    api: ext.version || version$1
                 },
                 reconnectInterval: reconnectInterval,
                 ws: ws,
@@ -5455,7 +5954,7 @@
             connection: connection,
             metrics: (_c = configuration.metrics) !== null && _c !== void 0 ? _c : true,
             contexts: (_d = configuration.contexts) !== null && _d !== void 0 ? _d : true,
-            version: ext.version || version,
+            version: ext.version || version$1,
             libs: (_e = ext.libs) !== null && _e !== void 0 ? _e : [],
             customLogger: configuration.customLogger
         };
@@ -5630,6 +6129,14 @@
             obj = obj[pathArr[i]];
         }
         obj[pathArr[i]] = value;
+    }
+    function isSubset(superObj, subObj) {
+        return Object.keys(subObj).every(function (ele) {
+            if (typeof subObj[ele] === "object") {
+                return isSubset((superObj === null || superObj === void 0 ? void 0 : superObj[ele]) || {}, subObj[ele] || {});
+            }
+            return subObj[ele] === (superObj === null || superObj === void 0 ? void 0 : superObj[ele]);
+        });
     }
     function deletePath(obj, path) {
         var pathArr = path.split(".");
@@ -6457,9 +6964,9 @@
                     getInvokePromise = function () { return __awaiter$1(_this, void 0, void 0, function () {
                         var methodDefinition, serversMethodMap, err_1, method, errorObj, timeout, additionalOptionsCopy, invokePromises, invocationMessages, results, allRejected;
                         var _this = this;
-                        var _a;
-                        return __generator(this, function (_b) {
-                            switch (_b.label) {
+                        var _a, _b, _c;
+                        return __generator(this, function (_d) {
+                            switch (_d.label) {
                                 case 0:
                                     if (typeof methodFilter === "string") {
                                         methodDefinition = { name: methodFilter };
@@ -6502,16 +7009,16 @@
                                     }
                                     serversMethodMap = this.getServerMethodsByFilterAndTarget(methodDefinition, target);
                                     if (!(serversMethodMap.length === 0)) return [3, 4];
-                                    _b.label = 1;
+                                    _d.label = 1;
                                 case 1:
-                                    _b.trys.push([1, 3, , 4]);
+                                    _d.trys.push([1, 3, , 4]);
                                     return [4, this.tryToAwaitForMethods(methodDefinition, target, additionalOptions)];
                                 case 2:
-                                    serversMethodMap = _b.sent();
+                                    serversMethodMap = _d.sent();
                                     return [3, 4];
                                 case 3:
-                                    err_1 = _b.sent();
-                                    method = __assign$1(__assign$1({}, methodDefinition), { getServers: function () { return []; }, supportsStreaming: false, objectTypes: (_a = methodDefinition.objectTypes) !== null && _a !== void 0 ? _a : [] });
+                                    err_1 = _d.sent();
+                                    method = __assign$1(__assign$1({}, methodDefinition), { getServers: function () { return []; }, supportsStreaming: false, objectTypes: (_a = methodDefinition.objectTypes) !== null && _a !== void 0 ? _a : [], flags: (_c = (_b = methodDefinition.flags) === null || _b === void 0 ? void 0 : _b.metadata) !== null && _c !== void 0 ? _c : {} });
                                     errorObj = {
                                         method: method,
                                         called_with: argumentObj,
@@ -6540,7 +7047,7 @@
                                     });
                                     return [4, Promise.all(invokePromises)];
                                 case 5:
-                                    invocationMessages = _b.sent();
+                                    invocationMessages = _d.sent();
                                     results = this.getInvocationResultObj(invocationMessages, methodDefinition, argumentObj);
                                     allRejected = invocationMessages.every(function (result) { return result.status === InvokeStatus.Error; });
                                     if (allRejected) {
@@ -6680,38 +7187,24 @@
                     && prop !== "identifier"
                     && prop[0] !== "_";
             });
-            return filterProps.reduce(function (isMatch, prop) {
+            return filterProps.every(function (prop) {
+                var isMatch;
                 var filterValue = filter[prop];
                 var repoMethodValue = repoMethod[prop];
-                if (prop === "objectTypes") {
-                    var containsAllFromFilter = function (filterObjTypes, repoObjectTypes) {
-                        var objTypeToContains = filterObjTypes.reduce(function (object, objType) {
-                            object[objType] = false;
-                            return object;
-                        }, {});
-                        repoObjectTypes.forEach(function (repoObjType) {
-                            if (objTypeToContains[repoObjType] !== undefined) {
-                                objTypeToContains[repoObjType] = true;
-                            }
+                switch (prop) {
+                    case "objectTypes":
+                        isMatch = (filterValue || []).every(function (filterValueEl) {
+                            return (repoMethodValue || []).includes(filterValueEl);
                         });
-                        var filterIsFullfilled = function () { return Object.keys(objTypeToContains).reduce(function (isFullfiled, objType) {
-                            if (!objTypeToContains[objType]) {
-                                isFullfiled = false;
-                            }
-                            return isFullfiled;
-                        }, true); };
-                        return filterIsFullfilled();
-                    };
-                    if (filterValue.length > repoMethodValue.length
-                        || containsAllFromFilter(filterValue, repoMethodValue) === false) {
-                        isMatch = false;
-                    }
-                }
-                else if (String(filterValue).toLowerCase() !== String(repoMethodValue).toLowerCase()) {
-                    isMatch = false;
+                        break;
+                    case "flags":
+                        isMatch = isSubset(repoMethodValue || {}, filterValue || {});
+                        break;
+                    default:
+                        isMatch = String(filterValue).toLowerCase() === String(repoMethodValue).toLowerCase();
                 }
                 return isMatch;
-            }, true);
+            });
         };
         Client.prototype.getMethods = function (methodFilter) {
             var _this = this;
@@ -6758,7 +7251,7 @@
                 });
             }
             return servers.reduce(function (prev, current) {
-                var methodsForServer = _this.repo.getServerMethodsById(current.id);
+                var methodsForServer = Object.values(current.methods);
                 var matchingMethods = methodsForServer.filter(function (method) {
                     return _this.methodMatch(methodFilter, method);
                 });
@@ -6935,6 +7428,7 @@
         };
         Object.defineProperty(ServerStream.prototype, "definition", {
             get: function () {
+                var _a;
                 var def2 = this._repoMethod.definition;
                 return {
                     accepts: def2.accepts,
@@ -6944,6 +7438,7 @@
                     objectTypes: def2.objectTypes,
                     returns: def2.returns,
                     supportsStreaming: def2.supportsStreaming,
+                    flags: (_a = def2.flags) === null || _a === void 0 ? void 0 : _a.metadata,
                 };
             },
             enumerable: true,
@@ -7282,11 +7777,14 @@
     }());
 
     var InstanceWrapper = (function () {
-        function InstanceWrapper(instance, connection) {
+        function InstanceWrapper(API, instance, connection) {
             var _this = this;
-            this.wrapped = {
-                getMethods: getMethods,
-                getStreams: getStreams,
+            this.wrapped = {};
+            this.wrapped.getMethods = function () {
+                return API.methodsForInstance(this);
+            };
+            this.wrapped.getStreams = function () {
+                return API.methodsForInstance(this).filter(function (m) { return m.supportsStreaming; });
             };
             if (instance) {
                 this.refreshWrappedObject(instance);
@@ -7327,21 +7825,25 @@
         };
         return InstanceWrapper;
     }());
-    function getMethods() {
-        var _a;
-        return (_a = InstanceWrapper.API) === null || _a === void 0 ? void 0 : _a.methodsForInstance(this);
-    }
-    function getStreams() {
-        var _a;
-        return (_a = InstanceWrapper.API) === null || _a === void 0 ? void 0 : _a.methodsForInstance(this).filter(function (m) { return m.supportsStreaming; });
-    }
 
+    var hideMethodSystemFlags = function (method) {
+        return __assign$1(__assign$1({}, method), { flags: method.flags.metadata || {} });
+    };
     var ClientRepository = (function () {
-        function ClientRepository(logger) {
+        function ClientRepository(logger, API) {
             this.logger = logger;
+            this.API = API;
             this.servers = {};
             this.methodsCount = {};
             this.callbacks = lib$1();
+            var peerId = this.API.instance.peerId;
+            this.myServer = {
+                id: peerId,
+                methods: {},
+                instance: this.API.instance,
+                wrapper: this.API.unwrappedInstance,
+            };
+            this.servers[peerId] = this.myServer;
         }
         ClientRepository.prototype.addServer = function (info, serverId) {
             this.logger.debug("adding server " + serverId);
@@ -7349,7 +7851,7 @@
             if (current) {
                 return current.id;
             }
-            var wrapper = new InstanceWrapper(info);
+            var wrapper = new InstanceWrapper(this.API, info);
             var serverEntry = {
                 id: serverId,
                 methods: {},
@@ -7377,6 +7879,7 @@
             this.callbacks.execute("onServerRemoved", server.instance, reason);
         };
         ClientRepository.prototype.addServerMethod = function (serverId, method) {
+            var _a;
             var server = this.servers[serverId];
             if (!server) {
                 throw new Error("server does not exists");
@@ -7397,6 +7900,7 @@
                 accepts: method.input_signature,
                 returns: method.result_signature,
                 supportsStreaming: typeof method.flags !== "undefined" ? method.flags.streaming : false,
+                flags: (_a = method.flags) !== null && _a !== void 0 ? _a : {},
                 getServers: function () {
                     return that.getServersByMethod(identifier);
                 }
@@ -7405,12 +7909,13 @@
             methodDefinition.display_name = methodDefinition.displayName;
             methodDefinition.version = methodDefinition.version;
             server.methods[method.id] = methodDefinition;
+            var clientMethodDefinition = hideMethodSystemFlags(methodDefinition);
             if (!this.methodsCount[identifier]) {
                 this.methodsCount[identifier] = 0;
-                this.callbacks.execute("onMethodAdded", methodDefinition);
+                this.callbacks.execute("onMethodAdded", clientMethodDefinition);
             }
             this.methodsCount[identifier] = this.methodsCount[identifier] + 1;
-            this.callbacks.execute("onServerMethodAdded", server.instance, methodDefinition);
+            this.callbacks.execute("onServerMethodAdded", server.instance, clientMethodDefinition);
             return methodDefinition;
         };
         ClientRepository.prototype.removeServerMethod = function (serverId, methodId) {
@@ -7420,41 +7925,18 @@
             }
             var method = server.methods[methodId];
             delete server.methods[methodId];
+            var clientMethodDefinition = hideMethodSystemFlags(method);
             this.methodsCount[method.identifier] = this.methodsCount[method.identifier] - 1;
             if (this.methodsCount[method.identifier] === 0) {
-                this.callbacks.execute("onMethodRemoved", method);
+                this.callbacks.execute("onMethodRemoved", clientMethodDefinition);
             }
-            this.callbacks.execute("onServerMethodRemoved", server.instance, method);
+            this.callbacks.execute("onServerMethodRemoved", server.instance, clientMethodDefinition);
         };
         ClientRepository.prototype.getMethods = function () {
-            var _this = this;
-            var allMethods = {};
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                Object.keys(server.methods).forEach(function (methodId) {
-                    var method = server.methods[methodId];
-                    allMethods[method.identifier] = method;
-                });
-            });
-            var methodsAsArray = Object.keys(allMethods).map(function (id) {
-                return allMethods[id];
-            });
-            return methodsAsArray;
+            return this.extractMethodsFromServers(Object.values(this.servers)).map(hideMethodSystemFlags);
         };
         ClientRepository.prototype.getServers = function () {
-            var _this = this;
-            var allServers = [];
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                allServers.push(server);
-            });
-            return allServers;
-        };
-        ClientRepository.prototype.getServerMethodsById = function (serverId) {
-            var server = this.servers[serverId];
-            return Object.keys(server.methods).map(function (id) {
-                return server.methods[id];
-            });
+            return Object.values(this.servers).map(this.hideServerMethodSystemFlags);
         };
         ClientRepository.prototype.onServerAdded = function (callback) {
             var unsubscribeFunc = this.callbacks.add("onServerAdded", callback);
@@ -7498,14 +7980,17 @@
             return unsubscribeFunc;
         };
         ClientRepository.prototype.getServerById = function (id) {
-            return this.servers[id];
+            return this.hideServerMethodSystemFlags(this.servers[id]);
         };
         ClientRepository.prototype.reset = function () {
+            var _a;
             var _this = this;
             Object.keys(this.servers).forEach(function (key) {
                 _this.removeServerById(key, "reset");
             });
-            this.servers = {};
+            this.servers = (_a = {},
+                _a[this.myServer.id] = this.myServer,
+                _a);
             this.methodsCount = {};
         };
         ClientRepository.prototype.createMethodIdentifier = function (methodInfo) {
@@ -7514,13 +7999,10 @@
             return (methodInfo.name + accepts + returns).toLowerCase();
         };
         ClientRepository.prototype.getServersByMethod = function (identifier) {
-            var _this = this;
             var allServers = [];
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                Object.keys(server.methods).forEach(function (methodId) {
-                    var methodInfo = server.methods[methodId];
-                    if (methodInfo.identifier === identifier) {
+            Object.values(this.servers).forEach(function (server) {
+                Object.values(server.methods).forEach(function (method) {
+                    if (method.identifier === identifier) {
                         allServers.push(server.instance);
                     }
                 });
@@ -7540,6 +8022,20 @@
                 unsubCalled = true;
                 unsubscribeFunc();
             };
+        };
+        ClientRepository.prototype.hideServerMethodSystemFlags = function (server) {
+            var clientMethods = {};
+            Object.entries(server.methods).forEach(function (_a) {
+                var name = _a[0], method = _a[1];
+                clientMethods[name] = hideMethodSystemFlags(method);
+            });
+            return __assign$1(__assign$1({}, server), { methods: clientMethods });
+        };
+        ClientRepository.prototype.extractMethodsFromServers = function (servers) {
+            var methods = Object.values(servers).reduce(function (clientMethods, server) {
+                return __spreadArrays(clientMethods, Object.values(server.methods));
+            }, []);
+            return methods;
         };
         return ClientRepository;
     }());
@@ -7866,8 +8362,9 @@
         };
         ServerProtocol.prototype.register = function (repoMethod, isStreaming) {
             var _this = this;
+            var _a;
             var methodDef = repoMethod.definition;
-            var flags = { streaming: isStreaming || false };
+            var flags = Object.assign({}, { metadata: (_a = methodDef.flags) !== null && _a !== void 0 ? _a : {} }, { streaming: isStreaming || false });
             var registerMsg = {
                 type: "register",
                 methods: [{
@@ -8573,9 +9070,9 @@
             if (typeof configuration.waitTimeoutMs !== "number") {
                 configuration.waitTimeoutMs = 30 * 1000;
             }
-            InstanceWrapper.API = this;
-            this.instance = new InstanceWrapper(undefined, connection).unwrap();
-            this.clientRepository = new ClientRepository(configuration.logger.subLogger("cRep"));
+            this.unwrappedInstance = new InstanceWrapper(this, undefined, connection);
+            this.instance = this.unwrappedInstance.unwrap();
+            this.clientRepository = new ClientRepository(configuration.logger.subLogger("cRep"), this);
             this.serverRepository = new ServerRepository();
             var protocolPromise;
             if (connection.protocolVersion === 3) {
@@ -8638,6 +9135,16 @@
         };
         Interop.prototype.invoke = function (methodFilter, argumentObj, target, additionalOptions, success, error) {
             return this.client.invoke(methodFilter, argumentObj, target, additionalOptions, success, error);
+        };
+        Interop.prototype.waitForMethod = function (name) {
+            var pw = new PromiseWrapper();
+            var unsubscribe = this.client.methodAdded(function (m) {
+                if (m.name === name) {
+                    unsubscribe();
+                    pw.resolve(m);
+                }
+            });
+            return pw.promise;
         };
         return Interop;
     }());
@@ -8941,7 +9448,7 @@
                 _interop.invoke("T42.ACS.Feedback", feedbackInfo, "best");
             };
             var info = {
-                coreVersion: version,
+                coreVersion: version$1,
                 version: internalConfig.version
             };
             glueInitTimer.stop();
@@ -9010,7 +9517,7 @@
                 var deprecatedDecorator = function (fn, wrong, proper) {
                     return function () {
                         glue.logger.warn("glue.js - 'glue.agm." + wrong + "' method is deprecated, use 'glue.interop." + proper + "' instead.");
-                        fn.apply(glue.agm, arguments);
+                        return fn.apply(glue.agm, arguments);
                     };
                 };
                 var agmAny = glue.agm;
@@ -9042,10 +9549,8 @@
     if (typeof window !== "undefined") {
         window.GlueCore = GlueCore;
     }
-    GlueCore.version = version;
+    GlueCore.version = version$1;
     GlueCore.default = GlueCore;
-
-    var version$1 = "2.0.0-beta.0";
 
     const glueWebFactory = createFactoryFunction(GlueCore);
     if (typeof window !== "undefined") {
@@ -9053,7 +9558,7 @@
         windowAny.GlueWeb = glueWebFactory;
         delete windowAny.GlueCore;
     }
-    glueWebFactory.version = version$1;
+    glueWebFactory.version = version;
 
     return glueWebFactory;
 

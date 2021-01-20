@@ -19,6 +19,18 @@
     PERFORMANCE OF THIS SOFTWARE.
     ***************************************************************************** */
 
+    function __rest(s, e) {
+        var t = {};
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+            t[p] = s[p];
+        if (s != null && typeof Object.getOwnPropertySymbols === "function")
+            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                    t[p[i]] = s[p[i]];
+            }
+        return t;
+    }
+
     function __awaiter(thisArg, _arguments, P, generator) {
         function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
         return new (P || (P = Promise))(function (resolve, reject) {
@@ -55,7 +67,7 @@
     }
 
     const defaultConfig = {
-        logger: "trace",
+        logger: "info",
         gateway: { webPlatform: {} },
         libraries: []
     };
@@ -63,7 +75,7 @@
         var _a;
         const combined = Object.assign({}, defaultConfig, config);
         if (combined.systemLogger) {
-            combined.logger = (_a = combined.systemLogger.level) !== null && _a !== void 0 ? _a : "trace";
+            combined.logger = (_a = combined.systemLogger.level) !== null && _a !== void 0 ? _a : "info";
         }
         return combined;
     };
@@ -240,7 +252,7 @@
         return __assign.apply(this, arguments);
     };
 
-    function __rest(s, e) {
+    function __rest$1(s, e) {
         var t = {};
         for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
             t[p] = s[p];
@@ -332,7 +344,7 @@
         return paths.map(function (path) { return (typeof path === 'string' ? "." + path : "[" + path + "]"); }).join('');
     };
     var prependAt = function (newAt, _a) {
-        var at = _a.at, rest = __rest(_a, ["at"]);
+        var at = _a.at, rest = __rest$1(_a, ["at"]);
         return (__assign({ at: newAt + (at || '') }, rest));
     };
     /**
@@ -888,9 +900,9 @@
 
     const nonEmptyStringDecoder = string().where((s) => s.length > 0, "Expected a non-empty string");
     const nonNegativeNumberDecoder = number().where((num) => num >= 0, "Expected a non-negative number");
-    const libDomainDecoder = oneOf(constant("windows"), constant("appManager"), constant("layouts"));
+    const libDomainDecoder = oneOf(constant("windows"), constant("appManager"), constant("layouts"), constant("intents"));
     const windowOperationTypesDecoder = oneOf(constant("openWindow"), constant("windowHello"), constant("windowAdded"), constant("windowRemoved"), constant("getBounds"), constant("getUrl"), constant("moveResize"), constant("focus"), constant("close"), constant("getTitle"), constant("setTitle"));
-    const appManagerOperationTypesDecoder = oneOf(constant("appHello"), constant("applicationAdded"), constant("applicationRemoved"), constant("applicationChanged"), constant("instanceStarted"), constant("instanceStopped"), constant("applicationStart"), constant("instanceStop"));
+    const appManagerOperationTypesDecoder = oneOf(constant("appHello"), constant("applicationAdded"), constant("applicationRemoved"), constant("applicationChanged"), constant("instanceStarted"), constant("instanceStopped"), constant("applicationStart"), constant("instanceStop"), constant("clear"));
     const layoutsOperationTypesDecoder = oneOf(constant("layoutAdded"), constant("layoutChanged"), constant("layoutRemoved"), constant("get"), constant("getAll"), constant("export"), constant("import"), constant("remove"));
     const windowRelativeDirectionDecoder = oneOf(constant("top"), constant("left"), constant("right"), constant("bottom"));
     const windowOpenSettingsDecoder = optional(object({
@@ -900,7 +912,8 @@
         height: optional(nonNegativeNumberDecoder),
         context: optional(anyJson()),
         relativeTo: optional(nonEmptyStringDecoder),
-        relativeDirection: optional(windowRelativeDirectionDecoder)
+        relativeDirection: optional(windowRelativeDirectionDecoder),
+        windowId: optional(nonEmptyStringDecoder)
     }));
     const openWindowConfigDecoder = object({
         name: nonEmptyStringDecoder,
@@ -957,8 +970,61 @@
         id: nonEmptyStringDecoder,
         applicationName: nonEmptyStringDecoder
     });
+    const applicationDetailsDecoder = object({
+        url: nonEmptyStringDecoder,
+        top: optional(number()),
+        left: optional(number()),
+        width: optional(nonNegativeNumberDecoder),
+        height: optional(nonNegativeNumberDecoder)
+    });
+    const intentDefinitionDecoder = object({
+        name: nonEmptyStringDecoder,
+        displayName: optional(string()),
+        contexts: optional(array(string())),
+        customConfig: optional(object())
+    });
+    const fdc3AppDefinitionDecoder = object({
+        name: nonEmptyStringDecoder,
+        title: optional(nonEmptyStringDecoder),
+        version: optional(nonEmptyStringDecoder),
+        appId: nonEmptyStringDecoder,
+        manifest: nonEmptyStringDecoder,
+        manifestType: nonEmptyStringDecoder,
+        tooltip: optional(nonEmptyStringDecoder),
+        description: optional(nonEmptyStringDecoder),
+        contactEmail: optional(nonEmptyStringDecoder),
+        supportEmail: optional(nonEmptyStringDecoder),
+        publisher: optional(nonEmptyStringDecoder),
+        images: optional(array(object({ url: optional(nonEmptyStringDecoder) }))),
+        icons: optional(array(object({ icon: optional(nonEmptyStringDecoder) }))),
+        customConfig: anyJson(),
+        intents: optional(array(intentDefinitionDecoder))
+    });
+    const applicationDefinitionDecoder = object({
+        name: nonEmptyStringDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
+        title: optional(nonEmptyStringDecoder),
+        version: optional(nonEmptyStringDecoder),
+        customProperties: optional(anyJson()),
+        icon: optional(nonEmptyStringDecoder),
+        caption: optional(nonEmptyStringDecoder),
+        details: applicationDetailsDecoder,
+        intents: optional(array(intentDefinitionDecoder))
+    });
+    const allApplicationDefinitionsDecoder = oneOf(applicationDefinitionDecoder, fdc3AppDefinitionDecoder);
+    const appsImportOperationDecoder = object({
+        definitions: array(allApplicationDefinitionsDecoder),
+        mode: oneOf(constant("replace"), constant("merge"))
+    });
+    const appRemoveConfigDecoder = object({
+        name: nonEmptyStringDecoder
+    });
+    const appsExportOperationDecoder = object({
+        definitions: array(applicationDefinitionDecoder)
+    });
     const applicationDataDecoder = object({
         name: nonEmptyStringDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
         instances: array(instanceDataDecoder),
         userProperties: optional(anyJson()),
         title: optional(nonEmptyStringDecoder),
@@ -968,6 +1034,7 @@
     });
     const baseApplicationDataDecoder = object({
         name: nonEmptyStringDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
         userProperties: anyJson(),
         title: optional(nonEmptyStringDecoder),
         version: optional(nonEmptyStringDecoder),
@@ -983,6 +1050,7 @@
     const applicationStartConfigDecoder = object({
         name: nonEmptyStringDecoder,
         waitForAGMReady: boolean(),
+        id: optional(nonEmptyStringDecoder),
         context: optional(anyJson()),
         top: optional(number()),
         left: optional(number()),
@@ -1040,6 +1108,7 @@
         name: nonEmptyStringDecoder,
         type: layoutTypeDecoder,
         components: array(oneOf(windowLayoutComponentDecoder, workspaceLayoutComponentDecoder)),
+        version: optional(nonEmptyStringDecoder),
         context: optional(anyJson()),
         metadata: optional(anyJson())
     });
@@ -1069,6 +1138,11 @@
     const allLayoutsFullConfigDecoder = object({
         layouts: array(glueLayoutDecoder)
     });
+    const importModeDecoder = oneOf(constant("replace"), constant("merge"));
+    const layoutsImportConfigDecoder = object({
+        layouts: array(glueLayoutDecoder),
+        mode: importModeDecoder
+    });
     const allLayoutsSummariesResultDecoder = object({
         summaries: array(layoutSummaryDecoder)
     });
@@ -1078,6 +1152,65 @@
     const optionalSimpleLayoutResult = object({
         layout: optional(glueLayoutDecoder)
     });
+    const intentsOperationTypesDecoder = oneOf(constant("findIntent"), constant("getIntents"), constant("raiseIntent"));
+    const intentHandlerDecoder = object({
+        applicationName: nonEmptyStringDecoder,
+        applicationTitle: string(),
+        applicationDescription: optional(string()),
+        applicationIcon: optional(string()),
+        type: oneOf(constant("app"), constant("instance")),
+        displayName: optional(string()),
+        contextTypes: optional(array(nonEmptyStringDecoder)),
+        instanceId: optional(string()),
+        instanceTitle: optional(string())
+    });
+    const intentDecoder = object({
+        name: nonEmptyStringDecoder,
+        handlers: array(intentHandlerDecoder)
+    });
+    const intentTargetDecoder = oneOf(constant("startNew"), constant("reuse"), object({
+        app: optional(nonEmptyStringDecoder),
+        instance: optional(nonEmptyStringDecoder)
+    }));
+    const intentContextDecoder = object({
+        type: optional(nonEmptyStringDecoder),
+        data: optional(object())
+    });
+    const intentsDecoder = array(intentDecoder);
+    const wrappedIntentsDecoder = object({
+        intents: intentsDecoder
+    });
+    const intentFilterDecoder = object({
+        name: optional(nonEmptyStringDecoder),
+        contextType: optional(nonEmptyStringDecoder)
+    });
+    const findFilterDecoder = oneOf(nonEmptyStringDecoder, intentFilterDecoder);
+    const wrappedIntentFilterDecoder = object({
+        filter: optional(intentFilterDecoder)
+    });
+    const intentRequestDecoder = object({
+        intent: nonEmptyStringDecoder,
+        target: optional(intentTargetDecoder),
+        context: optional(intentContextDecoder),
+        options: optional(windowOpenSettingsDecoder)
+    });
+    const raiseRequestDecoder = oneOf(nonEmptyStringDecoder, intentRequestDecoder);
+    const intentResultDecoder = object({
+        request: intentRequestDecoder,
+        handler: intentHandlerDecoder,
+        result: anyJson()
+    });
+    const addIntentListenerRequestDecoder = object({
+        intent: nonEmptyStringDecoder,
+        contextTypes: optional(array(nonEmptyStringDecoder)),
+        displayName: optional(string()),
+        icon: optional(string()),
+        description: optional(string())
+    });
+    const addIntentListenerIntentDecoder = oneOf(nonEmptyStringDecoder, addIntentListenerRequestDecoder);
+    const channelNameDecoder = (channelNames) => {
+        return nonEmptyStringDecoder.where(s => channelNames.includes(s), "Expected a valid channel name");
+    };
 
     const operations = {
         openWindow: { name: "openWindow", dataDecoder: openWindowConfigDecoder, resultDecoder: coreWindowDataDecoder },
@@ -1347,7 +1480,7 @@
         }
         onContextUpdated(callback) {
             if (typeof callback !== "function") {
-                throw new Error("Cannot subscribe to context changes, because the provided callback is not a function");
+                throw new Error("Cannot subscribe to context changes, because the provided callback is not a function!");
             }
             const wrappedCallback = (data) => {
                 callback(data, this.me);
@@ -1434,9 +1567,15 @@
             return Object.assign({}, this.me);
         }
         onWindowAdded(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to window added, because the provided callback is not a function!");
+            }
             return this.registry.add("window-added", callback);
         }
         onWindowRemoved(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to window removed, because the provided callback is not a function!");
+            }
             return this.registry.add("window-removed", callback);
         }
         sayHello() {
@@ -1524,7 +1663,7 @@
                     config.relative ? 0 : window.innerWidth;
                 const moveMethod = config.relative ? window.moveBy : window.moveTo;
                 const resizeMethod = config.relative ? window.resizeBy : window.resizeTo;
-                moveMethod(targetTop, targetLeft);
+                moveMethod(targetLeft, targetTop);
                 resizeMethod(targetWidth, targetHeight);
             });
         }
@@ -1721,7 +1860,11 @@
         instanceStarted: { name: "instanceStarted", dataDecoder: instanceDataDecoder },
         instanceStopped: { name: "instanceStopped", dataDecoder: instanceDataDecoder },
         applicationStart: { name: "applicationStart", dataDecoder: applicationStartConfigDecoder, resultDecoder: instanceDataDecoder },
-        instanceStop: { name: "instanceStop", dataDecoder: basicInstanceDataDecoder }
+        instanceStop: { name: "instanceStop", dataDecoder: basicInstanceDataDecoder },
+        import: { name: "import" },
+        remove: { name: "remove", dataDecoder: appRemoveConfigDecoder },
+        export: { name: "export", resultDecoder: appsExportOperationDecoder },
+        clear: { name: "clear" }
     };
 
     class AppManagerController {
@@ -1762,13 +1905,13 @@
             });
         }
         onInstanceStarted(callback) {
-            return this.registry.add("instance-started", callback);
+            return this.registry.add("instance-started", callback, this.instances);
         }
         onInstanceStopped(callback) {
             return this.registry.add("instance-stopped", callback);
         }
         startApplication(appName, context, options) {
-            var _a;
+            var _a, _b;
             return __awaiter$1(this, void 0, void 0, function* () {
                 const startOptions = {
                     name: appName,
@@ -1779,7 +1922,8 @@
                     width: options === null || options === void 0 ? void 0 : options.width,
                     height: options === null || options === void 0 ? void 0 : options.height,
                     relativeTo: options === null || options === void 0 ? void 0 : options.relativeTo,
-                    relativeDirection: options === null || options === void 0 ? void 0 : options.relativeDirection
+                    relativeDirection: options === null || options === void 0 ? void 0 : options.relativeDirection,
+                    id: (_b = options) === null || _b === void 0 ? void 0 : _b.reuseId
                 };
                 const openResult = yield this.bridge.send("appManager", operations$1.applicationStart, startOptions);
                 const app = this.applications.find((a) => a.name === openResult.applicationName);
@@ -1789,6 +1933,12 @@
         toApi() {
             const api = {
                 myInstance: this.me,
+                inMemory: {
+                    import: this.import.bind(this),
+                    remove: this.remove.bind(this),
+                    export: this.export.bind(this),
+                    clear: this.clear.bind(this)
+                },
                 application: this.getApplication.bind(this),
                 applications: this.getApplications.bind(this),
                 instances: this.getInstances.bind(this),
@@ -1808,7 +1958,7 @@
             operations$1.instanceStopped.execute = this.handleInstanceStoppedMessage.bind(this);
         }
         onAppAdded(callback) {
-            return this.registry.add("application-added", callback);
+            return this.registry.add("application-added", callback, this.applications);
         }
         onAppRemoved(callback) {
             return this.registry.add("application-removed", callback);
@@ -1821,7 +1971,7 @@
                 if (this.applications.some((app) => app.name === appData.name)) {
                     return;
                 }
-                const app = yield this.ioc.buildApplication(appData);
+                const app = yield this.ioc.buildApplication(appData, []);
                 const instances = this.instances.filter((instance) => instance.application.name === app.name);
                 app.instances.push(...instances);
                 this.applications.push(app);
@@ -1886,6 +2036,46 @@
                 this.registry.execute("instance-stopped", instance);
             });
         }
+        import(definitions, mode = "replace") {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                importModeDecoder.runWithException(mode);
+                if (!Array.isArray(definitions)) {
+                    throw new Error("Import must be called with an array of definitions");
+                }
+                const parseResult = definitions.reduce((soFar, definition) => {
+                    const decodeResult = allApplicationDefinitionsDecoder.run(definition);
+                    if (!decodeResult.ok) {
+                        soFar.invalid.push({ app: definition === null || definition === void 0 ? void 0 : definition.name, error: JSON.stringify(decodeResult.error) });
+                    }
+                    else {
+                        soFar.valid.push(definition);
+                    }
+                    return soFar;
+                }, { valid: [], invalid: [] });
+                yield this.bridge.send("appManager", operations$1.import, { definitions: parseResult.valid, mode });
+                return {
+                    imported: parseResult.valid.map((valid) => valid.name),
+                    errors: parseResult.invalid
+                };
+            });
+        }
+        remove(name) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                nonEmptyStringDecoder.runWithException(name);
+                yield this.bridge.send("appManager", operations$1.remove, { name });
+            });
+        }
+        clear() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                yield this.bridge.send("appManager", operations$1.clear, undefined);
+            });
+        }
+        export() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const response = yield this.bridge.send("appManager", operations$1.export, undefined);
+                return response.definitions;
+            });
+        }
         getApplication(name) {
             const verifiedName = nonEmptyStringDecoder.runWithException(name);
             return this.applications.find((app) => app.name === verifiedName);
@@ -1900,7 +2090,7 @@
             return __awaiter$1(this, void 0, void 0, function* () {
                 const result = yield this.bridge.send("appManager", operations$1.appHello, { windowId: this.actualWindowId });
                 this.logger.trace("the platform responded to the hello message with a full list of apps");
-                this.applications = yield Promise.all(result.apps.map((app) => this.ioc.buildApplication(app)));
+                this.applications = yield Promise.all(result.apps.map((app) => this.ioc.buildApplication(app, app.instances)));
                 this.instances = this.applications.reduce((instancesSoFar, app) => {
                     instancesSoFar.push(...app.instances);
                     return instancesSoFar;
@@ -1969,14 +2159,14 @@
                 onInstanceStarted: this.onInstanceStarted.bind(this),
                 onInstanceStopped: this.onInstanceStopped.bind(this)
             };
-            this.me = Object.freeze(api);
+            this.me = api;
             return this.me;
         }
         onInstanceStarted(callback) {
             if (typeof callback !== "function") {
                 throw new Error("OnInstanceStarted requires a single argument of type function");
             }
-            return this.controller.onInstanceStarted((instance) => {
+            this.controller.onInstanceStarted((instance) => {
                 if (instance.application.name === this.data.name) {
                     callback(instance);
                 }
@@ -1986,7 +2176,7 @@
             if (typeof callback !== "function") {
                 throw new Error("OnInstanceStarted requires a single argument of type function");
             }
-            return this.controller.onInstanceStopped((instance) => {
+            this.controller.onInstanceStopped((instance) => {
                 if (instance.application.name === this.data.name) {
                     callback(instance);
                 }
@@ -2006,7 +2196,7 @@
         get: { name: "get", dataDecoder: simpleLayoutConfigDecoder, resultDecoder: optionalSimpleLayoutResult },
         getAll: { name: "getAll", dataDecoder: getAllLayoutsConfigDecoder, resultDecoder: allLayoutsSummariesResultDecoder },
         export: { name: "export", dataDecoder: getAllLayoutsConfigDecoder, resultDecoder: allLayoutsFullConfigDecoder },
-        import: { name: "import", dataDecoder: allLayoutsFullConfigDecoder },
+        import: { name: "import", dataDecoder: layoutsImportConfigDecoder },
         remove: { name: "remove", dataDecoder: simpleLayoutConfigDecoder }
     };
 
@@ -2083,10 +2273,23 @@
                 return result.layouts;
             });
         }
-        import(layouts) {
+        import(layouts, mode = "replace") {
             return __awaiter$1(this, void 0, void 0, function* () {
-                layouts.forEach((layout) => glueLayoutDecoder.runWithException(layout));
-                yield this.bridge.send("layouts", operations$2.import, { layouts });
+                importModeDecoder.runWithException(mode);
+                if (!Array.isArray(layouts)) {
+                    throw new Error("Import must be called with an array of layouts");
+                }
+                const parseResult = layouts.reduce((soFar, layout) => {
+                    const decodeResult = glueLayoutDecoder.run(layout);
+                    if (decodeResult.ok) {
+                        soFar.valid.push(layout);
+                    }
+                    else {
+                        this.logger.warn(`A layout with name: ${layout.name} was not imported, because of error: ${JSON.stringify(decodeResult.error)}`);
+                    }
+                    return soFar;
+                }, { valid: [] });
+                yield this.bridge.send("layouts", operations$2.import, { layouts: parseResult.valid, mode });
             });
         }
         save(layout) {
@@ -2187,6 +2390,298 @@
         }
     }
 
+    const operations$3 = {
+        getIntents: { name: "getIntents", resultDecoder: wrappedIntentsDecoder },
+        findIntent: { name: "findIntent", dataDecoder: wrappedIntentFilterDecoder, resultDecoder: wrappedIntentsDecoder },
+        raiseIntent: { name: "raiseIntent", dataDecoder: intentRequestDecoder, resultDecoder: intentResultDecoder }
+    };
+
+    class IntentsController {
+        constructor() {
+            this.myIntents = new Set();
+            this.GlueWebIntentsPrefix = "Tick42.FDC3.Intents.";
+        }
+        start(coreGlue, ioc) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                this.logger = coreGlue.logger.subLogger("intents.controller.web");
+                this.logger.trace("starting the web intents controller");
+                this.bridge = ioc.bridge;
+                this.interop = coreGlue.interop;
+                const api = this.toApi();
+                this.logger.trace("no need for platform registration, attaching the intents property to glue and returning");
+                coreGlue.intents = api;
+            });
+        }
+        handleBridgeMessage(args) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const operationName = intentsOperationTypesDecoder.runWithException(args.operation);
+                const operation = operations$3[operationName];
+                if (!operation.execute) {
+                    return;
+                }
+                let operationData = args.data;
+                if (operation.dataDecoder) {
+                    operationData = operation.dataDecoder.runWithException(args.data);
+                }
+                return yield operation.execute(operationData);
+            });
+        }
+        toApi() {
+            const api = {
+                raise: this.raise.bind(this),
+                all: this.all.bind(this),
+                addIntentListener: this.addIntentListener.bind(this),
+                find: this.find.bind(this)
+            };
+            return Object.freeze(api);
+        }
+        raise(request) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const requestObj = raiseRequestDecoder.runWithException(request);
+                let data;
+                if (typeof requestObj === "string") {
+                    data = {
+                        intent: requestObj
+                    };
+                }
+                else {
+                    data = requestObj;
+                }
+                const result = yield this.bridge.send("intents", operations$3.raiseIntent, data);
+                return result;
+            });
+        }
+        all() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const result = yield this.bridge.send("intents", operations$3.getIntents, undefined);
+                return result.intents;
+            });
+        }
+        addIntentListener(intent, handler) {
+            addIntentListenerIntentDecoder.runWithException(intent);
+            if (typeof handler !== "function") {
+                throw new Error("Cannot add intent listener, because the provided handler is not a function!");
+            }
+            let subscribed = true;
+            const intentName = typeof intent === "string" ? intent : intent.intent;
+            const methodName = `${this.GlueWebIntentsPrefix}${intentName}`;
+            const alreadyRegistered = this.myIntents.has(intentName);
+            if (alreadyRegistered) {
+                throw new Error(`Intent listener for intent ${intentName} already registered!`);
+            }
+            this.myIntents.add(intentName);
+            const result = {
+                unsubscribe: () => {
+                    subscribed = false;
+                    try {
+                        this.interop.unregister(methodName);
+                        this.myIntents.delete(intentName);
+                    }
+                    catch (error) {
+                        this.logger.trace(`Unsubscribed intent listener, but ${methodName} unregistration failed!`);
+                    }
+                }
+            };
+            const flags = typeof intent === "string" ? { intent } : intent;
+            this.interop.register({ name: methodName, flags }, (args) => {
+                if (subscribed) {
+                    return handler(args);
+                }
+            });
+            return result;
+        }
+        find(intentFilter) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                let data = undefined;
+                if (typeof intentFilter !== "undefined") {
+                    const intentFilterObj = findFilterDecoder.runWithException(intentFilter);
+                    if (typeof intentFilterObj === "string") {
+                        data = {
+                            filter: {
+                                name: intentFilterObj
+                            }
+                        };
+                    }
+                    else if (typeof intentFilterObj === "object") {
+                        data = {
+                            filter: intentFilterObj
+                        };
+                    }
+                }
+                const result = yield this.bridge.send("intents", operations$3.findIntent, data);
+                return result.intents;
+            });
+        }
+    }
+
+    class ChannelsController {
+        constructor() {
+            this.registry = lib();
+            this.GlueWebChannelsPrefix = "___channel___";
+            this.SubsKey = "subs";
+            this.ChangedKey = "changed";
+        }
+        start(coreGlue) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                this.logger = coreGlue.logger.subLogger("channels.controller.web");
+                this.logger.trace("starting the web channels controller");
+                this.contexts = coreGlue.contexts;
+                this.logger.trace("no need for platform registration, attaching the channels property to glue and returning");
+                const api = this.toApi();
+                coreGlue.channels = api;
+            });
+        }
+        handleBridgeMessage() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+            });
+        }
+        toApi() {
+            const api = {
+                subscribe: this.subscribe.bind(this),
+                subscribeFor: this.subscribeFor.bind(this),
+                publish: this.publish.bind(this),
+                all: this.all.bind(this),
+                list: this.list.bind(this),
+                get: this.get.bind(this),
+                join: this.join.bind(this),
+                leave: this.leave.bind(this),
+                current: this.current.bind(this),
+                my: this.my.bind(this),
+                changed: this.changed.bind(this),
+                onChanged: this.onChanged.bind(this),
+                add: this.add.bind(this)
+            };
+            return Object.freeze(api);
+        }
+        createContextName(channelName) {
+            return `${this.GlueWebChannelsPrefix}${channelName}`;
+        }
+        getAllChannelNames() {
+            const contextNames = this.contexts.all();
+            const channelContextNames = contextNames.filter((contextName) => contextName.startsWith(this.GlueWebChannelsPrefix));
+            const channelNames = channelContextNames.map((channelContextName) => channelContextName.replace(this.GlueWebChannelsPrefix, ""));
+            return channelNames;
+        }
+        unsubscribe() {
+            if (this.unsubscribeFunc) {
+                this.unsubscribeFunc();
+                this.unsubscribeFunc = undefined;
+            }
+        }
+        switchToChannel(name) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                this.unsubscribe();
+                this.currentChannelName = name;
+                if (typeof name !== "undefined") {
+                    const contextName = this.createContextName(name);
+                    this.unsubscribeFunc = yield this.contexts.subscribe(contextName, (context, _, __, ___, extraData) => {
+                        this.registry.execute(this.SubsKey, context.data, context, extraData === null || extraData === void 0 ? void 0 : extraData.updaterId);
+                    });
+                }
+                this.registry.execute(this.ChangedKey, name);
+            });
+        }
+        updateData(name, data) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const contextName = this.createContextName(name);
+                if (this.contexts.setPathSupported) {
+                    const pathValues = Object.keys(data).map((key) => {
+                        return {
+                            path: `data.${key}`,
+                            value: data[key]
+                        };
+                    });
+                    yield this.contexts.setPaths(contextName, pathValues);
+                }
+                else {
+                    yield this.contexts.update(contextName, { data });
+                }
+            });
+        }
+        subscribe(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to channels, because the provided callback is not a function!");
+            }
+            return this.registry.add(this.SubsKey, callback);
+        }
+        subscribeFor(name, callback) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                channelNameDecoder(channelNames).runWithException(name);
+                if (typeof callback !== "function") {
+                    throw new Error(`Cannot subscribe to channel ${name}, because the provided callback is not a function!`);
+                }
+                const contextName = this.createContextName(name);
+                return this.contexts.subscribe(contextName, (context, _, __, ___, extraData) => {
+                    callback(context.data, context, extraData === null || extraData === void 0 ? void 0 : extraData.updaterId);
+                });
+            });
+        }
+        publish(data, name) {
+            if (typeof data !== "object") {
+                throw new Error("Cannot publish to channel, because the provided data is not an object!");
+            }
+            if (typeof name !== "undefined") {
+                const channelNames = this.getAllChannelNames();
+                channelNameDecoder(channelNames).runWithException(name);
+                return this.updateData(name, data);
+            }
+            if (typeof this.currentChannelName === "undefined") {
+                throw new Error("Cannot publish to channel, because not joined to a channel!");
+            }
+            return this.updateData(this.currentChannelName, data);
+        }
+        all() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                return channelNames;
+            });
+        }
+        list() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                const channelContexts = yield Promise.all(channelNames.map((channelName) => this.get(channelName)));
+                return channelContexts;
+            });
+        }
+        get(name) {
+            const channelNames = this.getAllChannelNames();
+            channelNameDecoder(channelNames).runWithException(name);
+            const contextName = this.createContextName(name);
+            return this.contexts.get(contextName);
+        }
+        join(name) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const channelNames = this.getAllChannelNames();
+                channelNameDecoder(channelNames).runWithException(name);
+                yield this.switchToChannel(name);
+            });
+        }
+        leave() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                yield this.switchToChannel();
+            });
+        }
+        current() {
+            return this.currentChannelName;
+        }
+        my() {
+            return this.current();
+        }
+        changed(callback) {
+            if (typeof callback !== "function") {
+                throw new Error("Cannot subscribe to channel changed, because the provided callback is not a function!");
+            }
+            return this.registry.add(this.ChangedKey, callback);
+        }
+        onChanged(callback) {
+            return this.changed(callback);
+        }
+        add(info) {
+            throw new Error("Method `add()` isn't implemented.");
+        }
+    }
+
     class IoC {
         constructor(coreGlue) {
             this.coreGlue = coreGlue;
@@ -2194,7 +2689,9 @@
                 windows: this.windowsController,
                 appManager: this.appManagerController,
                 layouts: this.layoutsController,
-                notifications: this.notificationsController
+                notifications: this.notificationsController,
+                intents: this.intentsController,
+                channels: this.channelsController
             };
         }
         get windowsController() {
@@ -2221,6 +2718,18 @@
             }
             return this._notificationsControllerInstance;
         }
+        get intentsController() {
+            if (!this._intentsControllerInstance) {
+                this._intentsControllerInstance = new IntentsController();
+            }
+            return this._intentsControllerInstance;
+        }
+        get channelsController() {
+            if (!this._channelsControllerInstance) {
+                this._channelsControllerInstance = new ChannelsController();
+            }
+            return this._channelsControllerInstance;
+        }
         get bridge() {
             if (!this._bridgeInstance) {
                 this._bridgeInstance = new GlueBridge(this.coreGlue);
@@ -2234,10 +2743,10 @@
                 return { id, model, api };
             });
         }
-        buildApplication(app) {
+        buildApplication(app, applicationInstances) {
             return __awaiter$1(this, void 0, void 0, function* () {
                 const application = (new ApplicationModel(app, [], this.appManagerController)).toApi();
-                const instances = app.instances.map((instanceData) => this.buildInstance(instanceData, application));
+                const instances = applicationInstances.map((instanceData) => this.buildInstance(instanceData, application));
                 application.instances.push(...instances);
                 return application;
             });
@@ -2247,6 +2756,8 @@
         }
     }
 
+    var version = "2.0.4";
+
     const createFactoryFunction = (coreFactoryFunction) => {
         return (userConfig) => __awaiter$1(void 0, void 0, void 0, function* () {
             const config = parseConfig(userConfig);
@@ -2254,7 +2765,7 @@
                 return enterprise(config);
             }
             checkSingleton();
-            const glue = yield PromiseWrap(() => coreFactoryFunction(config), 30000, "Glue Web initialization timed out");
+            const glue = yield PromiseWrap(() => coreFactoryFunction(config, { version }), 30000, "Glue Web initialization timed out, because core didn't resolve");
             const logger = glue.logger.subLogger("web.main.controller");
             const ioc = new IoC(glue);
             yield ioc.bridge.start(ioc.controllers);
@@ -5320,7 +5831,7 @@
         }
     };
 
-    var version = "5.2.8-beta.0";
+    var version$1 = "5.4.0";
 
     function prepareConfig (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -5391,7 +5902,7 @@
                     process: pid,
                     region: region,
                     environment: environment,
-                    api: ext.version || version
+                    api: ext.version || version$1
                 },
                 reconnectInterval: reconnectInterval,
                 ws: ws,
@@ -5480,7 +5991,7 @@
             connection: connection,
             metrics: (_c = configuration.metrics) !== null && _c !== void 0 ? _c : true,
             contexts: (_d = configuration.contexts) !== null && _d !== void 0 ? _d : true,
-            version: ext.version || version,
+            version: ext.version || version$1,
             libs: (_e = ext.libs) !== null && _e !== void 0 ? _e : [],
             customLogger: configuration.customLogger
         };
@@ -5655,6 +6166,14 @@
             obj = obj[pathArr[i]];
         }
         obj[pathArr[i]] = value;
+    }
+    function isSubset(superObj, subObj) {
+        return Object.keys(subObj).every(function (ele) {
+            if (typeof subObj[ele] === "object") {
+                return isSubset((superObj === null || superObj === void 0 ? void 0 : superObj[ele]) || {}, subObj[ele] || {});
+            }
+            return subObj[ele] === (superObj === null || superObj === void 0 ? void 0 : superObj[ele]);
+        });
     }
     function deletePath(obj, path) {
         var pathArr = path.split(".");
@@ -6482,9 +7001,9 @@
                     getInvokePromise = function () { return __awaiter$1$1(_this, void 0, void 0, function () {
                         var methodDefinition, serversMethodMap, err_1, method, errorObj, timeout, additionalOptionsCopy, invokePromises, invocationMessages, results, allRejected;
                         var _this = this;
-                        var _a;
-                        return __generator(this, function (_b) {
-                            switch (_b.label) {
+                        var _a, _b, _c;
+                        return __generator(this, function (_d) {
+                            switch (_d.label) {
                                 case 0:
                                     if (typeof methodFilter === "string") {
                                         methodDefinition = { name: methodFilter };
@@ -6527,16 +7046,16 @@
                                     }
                                     serversMethodMap = this.getServerMethodsByFilterAndTarget(methodDefinition, target);
                                     if (!(serversMethodMap.length === 0)) return [3, 4];
-                                    _b.label = 1;
+                                    _d.label = 1;
                                 case 1:
-                                    _b.trys.push([1, 3, , 4]);
+                                    _d.trys.push([1, 3, , 4]);
                                     return [4, this.tryToAwaitForMethods(methodDefinition, target, additionalOptions)];
                                 case 2:
-                                    serversMethodMap = _b.sent();
+                                    serversMethodMap = _d.sent();
                                     return [3, 4];
                                 case 3:
-                                    err_1 = _b.sent();
-                                    method = __assign$1(__assign$1({}, methodDefinition), { getServers: function () { return []; }, supportsStreaming: false, objectTypes: (_a = methodDefinition.objectTypes) !== null && _a !== void 0 ? _a : [] });
+                                    err_1 = _d.sent();
+                                    method = __assign$1(__assign$1({}, methodDefinition), { getServers: function () { return []; }, supportsStreaming: false, objectTypes: (_a = methodDefinition.objectTypes) !== null && _a !== void 0 ? _a : [], flags: (_c = (_b = methodDefinition.flags) === null || _b === void 0 ? void 0 : _b.metadata) !== null && _c !== void 0 ? _c : {} });
                                     errorObj = {
                                         method: method,
                                         called_with: argumentObj,
@@ -6565,7 +7084,7 @@
                                     });
                                     return [4, Promise.all(invokePromises)];
                                 case 5:
-                                    invocationMessages = _b.sent();
+                                    invocationMessages = _d.sent();
                                     results = this.getInvocationResultObj(invocationMessages, methodDefinition, argumentObj);
                                     allRejected = invocationMessages.every(function (result) { return result.status === InvokeStatus.Error; });
                                     if (allRejected) {
@@ -6705,38 +7224,24 @@
                     && prop !== "identifier"
                     && prop[0] !== "_";
             });
-            return filterProps.reduce(function (isMatch, prop) {
+            return filterProps.every(function (prop) {
+                var isMatch;
                 var filterValue = filter[prop];
                 var repoMethodValue = repoMethod[prop];
-                if (prop === "objectTypes") {
-                    var containsAllFromFilter = function (filterObjTypes, repoObjectTypes) {
-                        var objTypeToContains = filterObjTypes.reduce(function (object, objType) {
-                            object[objType] = false;
-                            return object;
-                        }, {});
-                        repoObjectTypes.forEach(function (repoObjType) {
-                            if (objTypeToContains[repoObjType] !== undefined) {
-                                objTypeToContains[repoObjType] = true;
-                            }
+                switch (prop) {
+                    case "objectTypes":
+                        isMatch = (filterValue || []).every(function (filterValueEl) {
+                            return (repoMethodValue || []).includes(filterValueEl);
                         });
-                        var filterIsFullfilled = function () { return Object.keys(objTypeToContains).reduce(function (isFullfiled, objType) {
-                            if (!objTypeToContains[objType]) {
-                                isFullfiled = false;
-                            }
-                            return isFullfiled;
-                        }, true); };
-                        return filterIsFullfilled();
-                    };
-                    if (filterValue.length > repoMethodValue.length
-                        || containsAllFromFilter(filterValue, repoMethodValue) === false) {
-                        isMatch = false;
-                    }
-                }
-                else if (String(filterValue).toLowerCase() !== String(repoMethodValue).toLowerCase()) {
-                    isMatch = false;
+                        break;
+                    case "flags":
+                        isMatch = isSubset(repoMethodValue || {}, filterValue || {});
+                        break;
+                    default:
+                        isMatch = String(filterValue).toLowerCase() === String(repoMethodValue).toLowerCase();
                 }
                 return isMatch;
-            }, true);
+            });
         };
         Client.prototype.getMethods = function (methodFilter) {
             var _this = this;
@@ -6783,7 +7288,7 @@
                 });
             }
             return servers.reduce(function (prev, current) {
-                var methodsForServer = _this.repo.getServerMethodsById(current.id);
+                var methodsForServer = Object.values(current.methods);
                 var matchingMethods = methodsForServer.filter(function (method) {
                     return _this.methodMatch(methodFilter, method);
                 });
@@ -6960,6 +7465,7 @@
         };
         Object.defineProperty(ServerStream.prototype, "definition", {
             get: function () {
+                var _a;
                 var def2 = this._repoMethod.definition;
                 return {
                     accepts: def2.accepts,
@@ -6969,6 +7475,7 @@
                     objectTypes: def2.objectTypes,
                     returns: def2.returns,
                     supportsStreaming: def2.supportsStreaming,
+                    flags: (_a = def2.flags) === null || _a === void 0 ? void 0 : _a.metadata,
                 };
             },
             enumerable: true,
@@ -7307,11 +7814,14 @@
     }());
 
     var InstanceWrapper = (function () {
-        function InstanceWrapper(instance, connection) {
+        function InstanceWrapper(API, instance, connection) {
             var _this = this;
-            this.wrapped = {
-                getMethods: getMethods,
-                getStreams: getStreams,
+            this.wrapped = {};
+            this.wrapped.getMethods = function () {
+                return API.methodsForInstance(this);
+            };
+            this.wrapped.getStreams = function () {
+                return API.methodsForInstance(this).filter(function (m) { return m.supportsStreaming; });
             };
             if (instance) {
                 this.refreshWrappedObject(instance);
@@ -7352,21 +7862,25 @@
         };
         return InstanceWrapper;
     }());
-    function getMethods() {
-        var _a;
-        return (_a = InstanceWrapper.API) === null || _a === void 0 ? void 0 : _a.methodsForInstance(this);
-    }
-    function getStreams() {
-        var _a;
-        return (_a = InstanceWrapper.API) === null || _a === void 0 ? void 0 : _a.methodsForInstance(this).filter(function (m) { return m.supportsStreaming; });
-    }
 
+    var hideMethodSystemFlags = function (method) {
+        return __assign$1(__assign$1({}, method), { flags: method.flags.metadata || {} });
+    };
     var ClientRepository = (function () {
-        function ClientRepository(logger) {
+        function ClientRepository(logger, API) {
             this.logger = logger;
+            this.API = API;
             this.servers = {};
             this.methodsCount = {};
             this.callbacks = lib$1();
+            var peerId = this.API.instance.peerId;
+            this.myServer = {
+                id: peerId,
+                methods: {},
+                instance: this.API.instance,
+                wrapper: this.API.unwrappedInstance,
+            };
+            this.servers[peerId] = this.myServer;
         }
         ClientRepository.prototype.addServer = function (info, serverId) {
             this.logger.debug("adding server " + serverId);
@@ -7374,7 +7888,7 @@
             if (current) {
                 return current.id;
             }
-            var wrapper = new InstanceWrapper(info);
+            var wrapper = new InstanceWrapper(this.API, info);
             var serverEntry = {
                 id: serverId,
                 methods: {},
@@ -7402,6 +7916,7 @@
             this.callbacks.execute("onServerRemoved", server.instance, reason);
         };
         ClientRepository.prototype.addServerMethod = function (serverId, method) {
+            var _a;
             var server = this.servers[serverId];
             if (!server) {
                 throw new Error("server does not exists");
@@ -7422,6 +7937,7 @@
                 accepts: method.input_signature,
                 returns: method.result_signature,
                 supportsStreaming: typeof method.flags !== "undefined" ? method.flags.streaming : false,
+                flags: (_a = method.flags) !== null && _a !== void 0 ? _a : {},
                 getServers: function () {
                     return that.getServersByMethod(identifier);
                 }
@@ -7430,12 +7946,13 @@
             methodDefinition.display_name = methodDefinition.displayName;
             methodDefinition.version = methodDefinition.version;
             server.methods[method.id] = methodDefinition;
+            var clientMethodDefinition = hideMethodSystemFlags(methodDefinition);
             if (!this.methodsCount[identifier]) {
                 this.methodsCount[identifier] = 0;
-                this.callbacks.execute("onMethodAdded", methodDefinition);
+                this.callbacks.execute("onMethodAdded", clientMethodDefinition);
             }
             this.methodsCount[identifier] = this.methodsCount[identifier] + 1;
-            this.callbacks.execute("onServerMethodAdded", server.instance, methodDefinition);
+            this.callbacks.execute("onServerMethodAdded", server.instance, clientMethodDefinition);
             return methodDefinition;
         };
         ClientRepository.prototype.removeServerMethod = function (serverId, methodId) {
@@ -7445,41 +7962,18 @@
             }
             var method = server.methods[methodId];
             delete server.methods[methodId];
+            var clientMethodDefinition = hideMethodSystemFlags(method);
             this.methodsCount[method.identifier] = this.methodsCount[method.identifier] - 1;
             if (this.methodsCount[method.identifier] === 0) {
-                this.callbacks.execute("onMethodRemoved", method);
+                this.callbacks.execute("onMethodRemoved", clientMethodDefinition);
             }
-            this.callbacks.execute("onServerMethodRemoved", server.instance, method);
+            this.callbacks.execute("onServerMethodRemoved", server.instance, clientMethodDefinition);
         };
         ClientRepository.prototype.getMethods = function () {
-            var _this = this;
-            var allMethods = {};
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                Object.keys(server.methods).forEach(function (methodId) {
-                    var method = server.methods[methodId];
-                    allMethods[method.identifier] = method;
-                });
-            });
-            var methodsAsArray = Object.keys(allMethods).map(function (id) {
-                return allMethods[id];
-            });
-            return methodsAsArray;
+            return this.extractMethodsFromServers(Object.values(this.servers)).map(hideMethodSystemFlags);
         };
         ClientRepository.prototype.getServers = function () {
-            var _this = this;
-            var allServers = [];
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                allServers.push(server);
-            });
-            return allServers;
-        };
-        ClientRepository.prototype.getServerMethodsById = function (serverId) {
-            var server = this.servers[serverId];
-            return Object.keys(server.methods).map(function (id) {
-                return server.methods[id];
-            });
+            return Object.values(this.servers).map(this.hideServerMethodSystemFlags);
         };
         ClientRepository.prototype.onServerAdded = function (callback) {
             var unsubscribeFunc = this.callbacks.add("onServerAdded", callback);
@@ -7523,14 +8017,17 @@
             return unsubscribeFunc;
         };
         ClientRepository.prototype.getServerById = function (id) {
-            return this.servers[id];
+            return this.hideServerMethodSystemFlags(this.servers[id]);
         };
         ClientRepository.prototype.reset = function () {
+            var _a;
             var _this = this;
             Object.keys(this.servers).forEach(function (key) {
                 _this.removeServerById(key, "reset");
             });
-            this.servers = {};
+            this.servers = (_a = {},
+                _a[this.myServer.id] = this.myServer,
+                _a);
             this.methodsCount = {};
         };
         ClientRepository.prototype.createMethodIdentifier = function (methodInfo) {
@@ -7539,13 +8036,10 @@
             return (methodInfo.name + accepts + returns).toLowerCase();
         };
         ClientRepository.prototype.getServersByMethod = function (identifier) {
-            var _this = this;
             var allServers = [];
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                Object.keys(server.methods).forEach(function (methodId) {
-                    var methodInfo = server.methods[methodId];
-                    if (methodInfo.identifier === identifier) {
+            Object.values(this.servers).forEach(function (server) {
+                Object.values(server.methods).forEach(function (method) {
+                    if (method.identifier === identifier) {
                         allServers.push(server.instance);
                     }
                 });
@@ -7565,6 +8059,20 @@
                 unsubCalled = true;
                 unsubscribeFunc();
             };
+        };
+        ClientRepository.prototype.hideServerMethodSystemFlags = function (server) {
+            var clientMethods = {};
+            Object.entries(server.methods).forEach(function (_a) {
+                var name = _a[0], method = _a[1];
+                clientMethods[name] = hideMethodSystemFlags(method);
+            });
+            return __assign$1(__assign$1({}, server), { methods: clientMethods });
+        };
+        ClientRepository.prototype.extractMethodsFromServers = function (servers) {
+            var methods = Object.values(servers).reduce(function (clientMethods, server) {
+                return __spreadArrays(clientMethods, Object.values(server.methods));
+            }, []);
+            return methods;
         };
         return ClientRepository;
     }());
@@ -7891,8 +8399,9 @@
         };
         ServerProtocol.prototype.register = function (repoMethod, isStreaming) {
             var _this = this;
+            var _a;
             var methodDef = repoMethod.definition;
-            var flags = { streaming: isStreaming || false };
+            var flags = Object.assign({}, { metadata: (_a = methodDef.flags) !== null && _a !== void 0 ? _a : {} }, { streaming: isStreaming || false });
             var registerMsg = {
                 type: "register",
                 methods: [{
@@ -8598,9 +9107,9 @@
             if (typeof configuration.waitTimeoutMs !== "number") {
                 configuration.waitTimeoutMs = 30 * 1000;
             }
-            InstanceWrapper.API = this;
-            this.instance = new InstanceWrapper(undefined, connection).unwrap();
-            this.clientRepository = new ClientRepository(configuration.logger.subLogger("cRep"));
+            this.unwrappedInstance = new InstanceWrapper(this, undefined, connection);
+            this.instance = this.unwrappedInstance.unwrap();
+            this.clientRepository = new ClientRepository(configuration.logger.subLogger("cRep"), this);
             this.serverRepository = new ServerRepository();
             var protocolPromise;
             if (connection.protocolVersion === 3) {
@@ -8663,6 +9172,16 @@
         };
         Interop.prototype.invoke = function (methodFilter, argumentObj, target, additionalOptions, success, error) {
             return this.client.invoke(methodFilter, argumentObj, target, additionalOptions, success, error);
+        };
+        Interop.prototype.waitForMethod = function (name) {
+            var pw = new PromiseWrapper();
+            var unsubscribe = this.client.methodAdded(function (m) {
+                if (m.name === name) {
+                    unsubscribe();
+                    pw.resolve(m);
+                }
+            });
+            return pw.promise;
         };
         return Interop;
     }());
@@ -8966,7 +9485,7 @@
                 _interop.invoke("T42.ACS.Feedback", feedbackInfo, "best");
             };
             var info = {
-                coreVersion: version,
+                coreVersion: version$1,
                 version: internalConfig.version
             };
             glueInitTimer.stop();
@@ -9035,7 +9554,7 @@
                 var deprecatedDecorator = function (fn, wrong, proper) {
                     return function () {
                         glue.logger.warn("glue.js - 'glue.agm." + wrong + "' method is deprecated, use 'glue.interop." + proper + "' instead.");
-                        fn.apply(glue.agm, arguments);
+                        return fn.apply(glue.agm, arguments);
                     };
                 };
                 var agmAny = glue.agm;
@@ -9067,10 +9586,8 @@
     if (typeof window !== "undefined") {
         window.GlueCore = GlueCore;
     }
-    GlueCore.version = version;
+    GlueCore.version = version$1;
     GlueCore.default = GlueCore;
-
-    var version$1 = "2.0.0-beta.0";
 
     const glueWebFactory = createFactoryFunction(GlueCore);
     if (typeof window !== "undefined") {
@@ -9078,7 +9595,7 @@
         windowAny.GlueWeb = glueWebFactory;
         delete windowAny.GlueCore;
     }
-    glueWebFactory.version = version$1;
+    glueWebFactory.version = version;
 
     var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
@@ -9090,6 +9607,21 @@
     			return commonjsRequire(path, (base === undefined || base === null) ? module.path : base);
     		}
     	}, fn(module, module.exports), module.exports;
+    }
+
+    function getAugmentedNamespace(n) {
+    	if (n.__esModule) return n;
+    	var a = Object.defineProperty({}, '__esModule', {value: true});
+    	Object.keys(n).forEach(function (k) {
+    		var d = Object.getOwnPropertyDescriptor(n, k);
+    		Object.defineProperty(a, k, d.get ? d : {
+    			enumerable: true,
+    			get: function () {
+    				return n[k];
+    			}
+    		});
+    	});
+    	return a;
     }
 
     function commonjsRequire () {
@@ -10866,13 +11398,17 @@
         platformPing: { name: "platformPing" },
         platformReady: { name: "platformReady" },
         platformUnload: { name: "platformUnload" },
-        clientUnload: { name: "clientUnload" }
+        clientUnload: { name: "clientUnload" },
+        parentPing: { name: "parentPing" },
+        parentReady: { name: "parentReady" }
     };
     const GlueWebPlatformControlName$1 = "T42.Web.Platform.Control";
     const GlueWebPlatformStreamName$1 = "T42.Web.Platform.Stream";
     const GlueClientControlName$1 = "T42.Web.Client.Control";
     const GlueWebPlatformWorkspacesStreamName = "T42.Web.Platform.WSP.Stream";
     const GlueWorkspaceFrameClientControlName = "T42.Workspaces.Control";
+    const GlueWebIntentsPrefix = "Tick42.FDC3.Intents.";
+    const ChannelContextPrefix = "___channel___";
     const dbName = "glue42core";
     const dbVersion = 1;
 
@@ -11059,7 +11595,7 @@
         return __assign$2.apply(this, arguments);
     };
 
-    function __rest$1(s, e) {
+    function __rest$2(s, e) {
         var t = {};
         for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
             t[p] = s[p];
@@ -11151,7 +11687,7 @@
         return paths.map(function (path) { return (typeof path === 'string' ? "." + path : "[" + path + "]"); }).join('');
     };
     var prependAt$1 = function (newAt, _a) {
-        var at = _a.at, rest = __rest$1(_a, ["at"]);
+        var at = _a.at, rest = __rest$2(_a, ["at"]);
         return (__assign$2({ at: newAt + (at || '') }, rest));
     };
     /**
@@ -11713,12 +12249,7 @@
     const nonEmptyStringDecoder$1 = string$1().where((s) => s.length > 0, "Expected a non-empty string");
     const windowRelativeDirectionDecoder$1 = oneOf$1(constant$1("top"), constant$1("left"), constant$1("right"), constant$1("bottom"));
     const logLevelDecoder = oneOf$1(constant$1("trace"), constant$1("debug"), constant$1("info"), constant$1("warn"), constant$1("error"));
-    const channelMetaDecoder = anyJson$1().andThen((result) => {
-        const colorType = typeof result.color;
-        return colorType === "string" ?
-            anyJson$1() :
-            fail(`The channel meta must have a defined property color of type string, provided: ${colorType}`);
-    });
+    const channelMetaDecoder = anyJson$1().where((meta) => typeof meta["color"] === "string" && meta["color"].length > 0, "Expected color to be a non-empty string");
     const layoutTypeDecoder$1 = oneOf$1(constant$1("Global"), constant$1("Activity"), constant$1("ApplicationDefault"), constant$1("Swimlane"), constant$1("Workspace"));
     const componentTypeDecoder$1 = oneOf$1(constant$1("application"), constant$1("activity"));
     const functionCheck = (input, propDescription) => {
@@ -11746,7 +12277,7 @@
             main: boolean$1()
         })
     });
-    const libDomainDecoder$1 = oneOf$1(constant$1("windows"), constant$1("appManager"), constant$1("layouts"), constant$1("workspaces"));
+    const libDomainDecoder$1 = oneOf$1(constant$1("windows"), constant$1("appManager"), constant$1("layouts"), constant$1("workspaces"), constant$1("intents"));
     const windowLayoutItemDecoder$1 = object$1({
         type: constant$1("window"),
         config: object$1({
@@ -11777,12 +12308,6 @@
             children: array$1(oneOf$1(rowLayoutItemDecoder$1, columnLayoutItemDecoder$1, groupLayoutItemDecoder$1, windowLayoutItemDecoder$1))
         })
     });
-    const intentDecoder = object$1({
-        name: nonEmptyStringDecoder$1,
-        displayName: optional$1(nonEmptyStringDecoder$1),
-        contexts: optional$1(array$1(nonEmptyStringDecoder$1)),
-        customConfig: anyJson$1()
-    });
     const glueLayoutDecoder$1 = object$1({
         name: nonEmptyStringDecoder$1,
         type: layoutTypeDecoder$1,
@@ -11790,23 +12315,31 @@
         context: optional$1(anyJson$1()),
         metadata: optional$1(anyJson$1())
     });
-    const applicationCreateOptionsDecoder = object$1({
+    const applicationDetailsDecoder$1 = object$1({
         url: nonEmptyStringDecoder$1,
         top: optional$1(number$1()),
         left: optional$1(number$1()),
         width: optional$1(nonNegativeNumberDecoder$1),
         height: optional$1(nonNegativeNumberDecoder$1)
     });
+    const intentDefinitionDecoder$1 = object$1({
+        name: nonEmptyStringDecoder$1,
+        displayName: optional$1(string$1()),
+        contexts: optional$1(array$1(string$1())),
+        customConfig: optional$1(object$1())
+    });
     const glueCoreAppDefinitionDecoder = object$1({
         name: nonEmptyStringDecoder$1,
+        type: nonEmptyStringDecoder$1.where((s) => s === "window", "Expected a value of window"),
         title: optional$1(nonEmptyStringDecoder$1),
         version: optional$1(nonEmptyStringDecoder$1),
         customProperties: optional$1(anyJson$1()),
         icon: optional$1(nonEmptyStringDecoder$1),
         caption: optional$1(nonEmptyStringDecoder$1),
-        details: applicationCreateOptionsDecoder
+        details: applicationDetailsDecoder$1,
+        intents: optional$1(array$1(intentDefinitionDecoder$1))
     });
-    const fdc3AppDefinitionDecoder = object$1({
+    const fdc3AppDefinitionDecoder$1 = object$1({
         name: nonEmptyStringDecoder$1,
         title: optional$1(nonEmptyStringDecoder$1),
         version: optional$1(nonEmptyStringDecoder$1),
@@ -11821,7 +12354,7 @@
         images: optional$1(array$1(object$1({ url: optional$1(nonEmptyStringDecoder$1) }))),
         icons: optional$1(array$1(object$1({ icon: optional$1(nonEmptyStringDecoder$1) }))),
         customConfig: anyJson$1(),
-        intents: optional$1(array$1(intentDecoder))
+        intents: optional$1(array$1(intentDefinitionDecoder$1))
     });
     const remoteStoreDecoder = object$1({
         url: nonEmptyStringDecoder$1,
@@ -11842,37 +12375,17 @@
     });
     const pluginDefinitionDecoder = object$1({
         name: nonEmptyStringDecoder$1,
-        start: anyJson$1()
+        start: anyJson$1(),
+        config: anyJson$1()
     });
-    const allApplicationDefinitionsDecoder = oneOf$1(glueCoreAppDefinitionDecoder, fdc3AppDefinitionDecoder);
-    const appsCollectionDecoder = array$1(allApplicationDefinitionsDecoder);
+    const allApplicationDefinitionsDecoder$1 = oneOf$1(glueCoreAppDefinitionDecoder, fdc3AppDefinitionDecoder$1);
+    const appsCollectionDecoder = array$1(allApplicationDefinitionsDecoder$1);
     const applicationsConfigDecoder = object$1({
-        mode: oneOf$1(constant$1("local"), constant$1("remote"), constant$1("supplier")),
-        local: optional$1(array$1(allApplicationDefinitionsDecoder)),
-        remote: optional$1(remoteStoreDecoder),
-        supplier: optional$1(supplierDecoder)
-    }).andThen((result) => {
-        if (result.mode === "remote" && typeof result.remote === "undefined") {
-            return fail("The applications mode is selected as remote, but the remote property is not defined.");
-        }
-        if (result.mode === "supplier" && typeof result.supplier === "undefined") {
-            return fail("The applications mode is selected as supplier, but the supplier property is not defined.");
-        }
-        return anyJson$1();
+        local: optional$1(array$1(allApplicationDefinitionsDecoder$1))
     });
     const layoutsConfigDecoder = object$1({
-        mode: oneOf$1(constant$1("local"), constant$1("remote"), constant$1("supplier")),
-        local: optional$1(array$1(glueLayoutDecoder$1)),
-        remote: optional$1(remoteStoreDecoder),
-        supplier: optional$1(supplierDecoder)
-    }).andThen((result) => {
-        if (result.mode === "remote" && typeof result.remote === "undefined") {
-            return fail("The layouts mode is selected as remote, but the remote property is not defined.");
-        }
-        if (result.mode === "supplier" && typeof result.supplier === "undefined") {
-            return fail("The layouts mode is selected as supplier, but the supplier property is not defined.");
-        }
-        return anyJson$1();
+        mode: oneOf$1(constant$1("idb"), constant$1("session")),
+        local: optional$1(array$1(glueLayoutDecoder$1))
     });
     const channelsConfigDecoder = object$1({
         definitions: array$1(channelDefinitionDecoder)
@@ -11909,6 +12422,15 @@
         glue: optional$1(glueConfigDecoder),
         workspaces: optional$1(workspacesConfigDecoder),
         glueFactory: optional$1(anyJson$1().andThen((result) => functionCheck(result, "glueFactory")))
+    });
+    const windowOpenSettingsDecoder$1 = object$1({
+        top: optional$1(number$1()),
+        left: optional$1(number$1()),
+        width: optional$1(nonNegativeNumberDecoder$1),
+        height: optional$1(nonNegativeNumberDecoder$1),
+        context: optional$1(anyJson$1()),
+        relativeTo: optional$1(nonEmptyStringDecoder$1),
+        relativeDirection: optional$1(windowRelativeDirectionDecoder$1)
     });
 
     class PlatformLogger {
@@ -12247,39 +12769,55 @@
     var shortid$1 = lib$2;
 
     class PlatformController {
-        constructor(glueController, windowsController, applicationsController, layoutsController, workspacesController, portsBridge, stateController) {
+        constructor(glueController, windowsController, applicationsController, layoutsController, workspacesController, intentsController, channelsController, portsBridge, stateController) {
             this.glueController = glueController;
             this.windowsController = windowsController;
             this.applicationsController = applicationsController;
             this.layoutsController = layoutsController;
             this.workspacesController = workspacesController;
+            this.intentsController = intentsController;
+            this.channelsController = channelsController;
             this.portsBridge = portsBridge;
             this.stateController = stateController;
             this.controllers = {
                 windows: this.windowsController,
                 appManager: this.applicationsController,
                 layouts: this.layoutsController,
-                workspaces: this.workspacesController
+                workspaces: this.workspacesController,
+                intents: this.intentsController,
+                channels: this.channelsController
             };
         }
         get logger() {
             return logger.get("main.web.platform");
         }
         start(config) {
+            var _a;
             return __awaiter(this, void 0, void 0, function* () {
                 yield this.portsBridge.start(config.gateway);
                 this.portsBridge.onClientUnloaded(this.handleClientUnloaded.bind(this));
                 yield this.glueController.start(config);
-                yield Promise.all(Object.values(this.controllers).map((controller) => controller.start(config)));
                 yield Promise.all([
                     this.glueController.createPlatformSystemMethod(this.handleControlMessage.bind(this)),
                     this.glueController.createPlatformSystemStream()
                 ]);
                 this.stateController.start();
+                yield Promise.all(Object.values(this.controllers).map((controller) => controller.start(config)));
+                yield this.glueController.initClientGlue(config === null || config === void 0 ? void 0 : config.glue, config === null || config === void 0 ? void 0 : config.glueFactory);
+                (_a = config.plugins) === null || _a === void 0 ? void 0 : _a.definitions.forEach(this.startPlugin.bind(this));
             });
         }
-        initNewGlue(config, factory) {
-            return this.glueController.initGlue(config, factory);
+        getClientGlue() {
+            return this.glueController.clientGlue;
+        }
+        startPlugin(definition) {
+            var _a;
+            try {
+                definition.start(this.glueController.clientGlue, definition.config);
+            }
+            catch (error) {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(`Plugin: ${definition.name} threw while initiating: ${JSON.stringify(error.message)}`);
+            }
         }
         handleControlMessage(args, caller, success, error) {
             var _a, _b;
@@ -12301,7 +12839,7 @@
             })
                 .catch((err) => {
                 var _a;
-                const stringError = JSON.stringify(err.message);
+                const stringError = typeof err === "string" ? err : JSON.stringify(err.message);
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${args.commandId}] this command's execution was rejected, reason: ${stringError}`);
                 error(`The platform rejected operation ${args.operation} for domain: ${domain} with reason: ${stringError}`);
             });
@@ -12310,13 +12848,13 @@
             var _a;
             (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`detected unloading of client: ${client.windowId}, notifying all controllers`);
             Object.values(this.controllers).forEach((controller, idx) => {
-                var _a;
+                var _a, _b;
                 try {
-                    controller.handleClientUnloaded(client.windowId, client.win);
+                    (_a = controller.handleClientUnloaded) === null || _a === void 0 ? void 0 : _a.call(controller, client.windowId, client.win);
                 }
                 catch (error) {
                     const controllerName = Object.keys(this.controllers)[idx];
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.error(`${controllerName} controller threw when handling unloaded client ${client.windowId} with error message: ${JSON.stringify(error.message)}`);
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.error(`${controllerName} controller threw when handling unloaded client ${client.windowId} with error message: ${JSON.stringify(error.message)}`);
                 }
             });
         }
@@ -12333,11 +12871,10 @@
             }
         },
         applications: {
-            mode: "local",
             local: []
         },
         layouts: {
-            mode: "local",
+            mode: "idb",
             local: []
         },
         channels: {
@@ -12354,7 +12891,6 @@
         glue: {}
     };
     const defaultTargetString = "*";
-    const defaultFetchTimeoutMs = 3000;
 
     var isMergeableObject = function isMergeableObject(value) {
     	return isNonNullObject(value)
@@ -12488,7 +13024,7 @@
 
     var cjs = deepmerge_1;
 
-    var version$3 = "0.0.1-beta.1";
+    var version$3 = "1.0.3";
 
     class Platform {
         constructor(controller, config) {
@@ -12501,12 +13037,8 @@
                 yield this.controller.start(this.platformConfig);
             });
         }
-        createClientGlue(config = {}, factory) {
-            const validatedConfig = glueConfigDecoder.runWithException(config);
-            if (factory && typeof factory !== "function") {
-                throw new Error(`The factory parameter must be of type function, provided: ${typeof factory}`);
-            }
-            return this.controller.initNewGlue(validatedConfig, factory);
+        getClientGlue() {
+            return this.controller.getClientGlue();
         }
         exposeAPI() {
             return {
@@ -12536,7 +13068,7 @@
             var _a;
             if ((_a = verifiedConfig.plugins) === null || _a === void 0 ? void 0 : _a.definitions) {
                 const badDefinitions = verifiedConfig.plugins.definitions.reduce((soFar, definition) => {
-                    const startType = typeof definition;
+                    const startType = typeof definition.start;
                     const name = definition.name;
                     if (startType !== "function") {
                         soFar.push({ name, startType });
@@ -15606,7 +16138,7 @@
         }
     };
 
-    var version$4 = "5.2.8-beta.0";
+    var version$4 = "5.4.0";
 
     function prepareConfig$1 (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -15948,6 +16480,14 @@
             obj = obj[pathArr[i]];
         }
         obj[pathArr[i]] = value;
+    }
+    function isSubset$1(superObj, subObj) {
+        return Object.keys(subObj).every(function (ele) {
+            if (typeof subObj[ele] === "object") {
+                return isSubset$1((superObj === null || superObj === void 0 ? void 0 : superObj[ele]) || {}, subObj[ele] || {});
+            }
+            return subObj[ele] === (superObj === null || superObj === void 0 ? void 0 : superObj[ele]);
+        });
     }
     function deletePath$1(obj, path) {
         var pathArr = path.split(".");
@@ -16776,9 +17316,9 @@
                     getInvokePromise = function () { return __awaiter$2(_this, void 0, void 0, function () {
                         var methodDefinition, serversMethodMap, err_1, method, errorObj, timeout, additionalOptionsCopy, invokePromises, invocationMessages, results, allRejected;
                         var _this = this;
-                        var _a;
-                        return __generator$1(this, function (_b) {
-                            switch (_b.label) {
+                        var _a, _b, _c;
+                        return __generator$1(this, function (_d) {
+                            switch (_d.label) {
                                 case 0:
                                     if (typeof methodFilter === "string") {
                                         methodDefinition = { name: methodFilter };
@@ -16821,16 +17361,16 @@
                                     }
                                     serversMethodMap = this.getServerMethodsByFilterAndTarget(methodDefinition, target);
                                     if (!(serversMethodMap.length === 0)) return [3, 4];
-                                    _b.label = 1;
+                                    _d.label = 1;
                                 case 1:
-                                    _b.trys.push([1, 3, , 4]);
+                                    _d.trys.push([1, 3, , 4]);
                                     return [4, this.tryToAwaitForMethods(methodDefinition, target, additionalOptions)];
                                 case 2:
-                                    serversMethodMap = _b.sent();
+                                    serversMethodMap = _d.sent();
                                     return [3, 4];
                                 case 3:
-                                    err_1 = _b.sent();
-                                    method = __assign$3(__assign$3({}, methodDefinition), { getServers: function () { return []; }, supportsStreaming: false, objectTypes: (_a = methodDefinition.objectTypes) !== null && _a !== void 0 ? _a : [] });
+                                    err_1 = _d.sent();
+                                    method = __assign$3(__assign$3({}, methodDefinition), { getServers: function () { return []; }, supportsStreaming: false, objectTypes: (_a = methodDefinition.objectTypes) !== null && _a !== void 0 ? _a : [], flags: (_c = (_b = methodDefinition.flags) === null || _b === void 0 ? void 0 : _b.metadata) !== null && _c !== void 0 ? _c : {} });
                                     errorObj = {
                                         method: method,
                                         called_with: argumentObj,
@@ -16859,7 +17399,7 @@
                                     });
                                     return [4, Promise.all(invokePromises)];
                                 case 5:
-                                    invocationMessages = _b.sent();
+                                    invocationMessages = _d.sent();
                                     results = this.getInvocationResultObj(invocationMessages, methodDefinition, argumentObj);
                                     allRejected = invocationMessages.every(function (result) { return result.status === InvokeStatus$1.Error; });
                                     if (allRejected) {
@@ -16999,38 +17539,24 @@
                     && prop !== "identifier"
                     && prop[0] !== "_";
             });
-            return filterProps.reduce(function (isMatch, prop) {
+            return filterProps.every(function (prop) {
+                var isMatch;
                 var filterValue = filter[prop];
                 var repoMethodValue = repoMethod[prop];
-                if (prop === "objectTypes") {
-                    var containsAllFromFilter = function (filterObjTypes, repoObjectTypes) {
-                        var objTypeToContains = filterObjTypes.reduce(function (object, objType) {
-                            object[objType] = false;
-                            return object;
-                        }, {});
-                        repoObjectTypes.forEach(function (repoObjType) {
-                            if (objTypeToContains[repoObjType] !== undefined) {
-                                objTypeToContains[repoObjType] = true;
-                            }
+                switch (prop) {
+                    case "objectTypes":
+                        isMatch = (filterValue || []).every(function (filterValueEl) {
+                            return (repoMethodValue || []).includes(filterValueEl);
                         });
-                        var filterIsFullfilled = function () { return Object.keys(objTypeToContains).reduce(function (isFullfiled, objType) {
-                            if (!objTypeToContains[objType]) {
-                                isFullfiled = false;
-                            }
-                            return isFullfiled;
-                        }, true); };
-                        return filterIsFullfilled();
-                    };
-                    if (filterValue.length > repoMethodValue.length
-                        || containsAllFromFilter(filterValue, repoMethodValue) === false) {
-                        isMatch = false;
-                    }
-                }
-                else if (String(filterValue).toLowerCase() !== String(repoMethodValue).toLowerCase()) {
-                    isMatch = false;
+                        break;
+                    case "flags":
+                        isMatch = isSubset$1(repoMethodValue || {}, filterValue || {});
+                        break;
+                    default:
+                        isMatch = String(filterValue).toLowerCase() === String(repoMethodValue).toLowerCase();
                 }
                 return isMatch;
-            }, true);
+            });
         };
         Client.prototype.getMethods = function (methodFilter) {
             var _this = this;
@@ -17077,7 +17603,7 @@
                 });
             }
             return servers.reduce(function (prev, current) {
-                var methodsForServer = _this.repo.getServerMethodsById(current.id);
+                var methodsForServer = Object.values(current.methods);
                 var matchingMethods = methodsForServer.filter(function (method) {
                     return _this.methodMatch(methodFilter, method);
                 });
@@ -17254,6 +17780,7 @@
         };
         Object.defineProperty(ServerStream.prototype, "definition", {
             get: function () {
+                var _a;
                 var def2 = this._repoMethod.definition;
                 return {
                     accepts: def2.accepts,
@@ -17263,6 +17790,7 @@
                     objectTypes: def2.objectTypes,
                     returns: def2.returns,
                     supportsStreaming: def2.supportsStreaming,
+                    flags: (_a = def2.flags) === null || _a === void 0 ? void 0 : _a.metadata,
                 };
             },
             enumerable: true,
@@ -17601,11 +18129,14 @@
     }());
 
     var InstanceWrapper$1 = (function () {
-        function InstanceWrapper(instance, connection) {
+        function InstanceWrapper(API, instance, connection) {
             var _this = this;
-            this.wrapped = {
-                getMethods: getMethods$1,
-                getStreams: getStreams$1,
+            this.wrapped = {};
+            this.wrapped.getMethods = function () {
+                return API.methodsForInstance(this);
+            };
+            this.wrapped.getStreams = function () {
+                return API.methodsForInstance(this).filter(function (m) { return m.supportsStreaming; });
             };
             if (instance) {
                 this.refreshWrappedObject(instance);
@@ -17646,21 +18177,25 @@
         };
         return InstanceWrapper;
     }());
-    function getMethods$1() {
-        var _a;
-        return (_a = InstanceWrapper$1.API) === null || _a === void 0 ? void 0 : _a.methodsForInstance(this);
-    }
-    function getStreams$1() {
-        var _a;
-        return (_a = InstanceWrapper$1.API) === null || _a === void 0 ? void 0 : _a.methodsForInstance(this).filter(function (m) { return m.supportsStreaming; });
-    }
 
+    var hideMethodSystemFlags$1 = function (method) {
+        return __assign$3(__assign$3({}, method), { flags: method.flags.metadata || {} });
+    };
     var ClientRepository$1 = (function () {
-        function ClientRepository(logger) {
+        function ClientRepository(logger, API) {
             this.logger = logger;
+            this.API = API;
             this.servers = {};
             this.methodsCount = {};
             this.callbacks = lib$3();
+            var peerId = this.API.instance.peerId;
+            this.myServer = {
+                id: peerId,
+                methods: {},
+                instance: this.API.instance,
+                wrapper: this.API.unwrappedInstance,
+            };
+            this.servers[peerId] = this.myServer;
         }
         ClientRepository.prototype.addServer = function (info, serverId) {
             this.logger.debug("adding server " + serverId);
@@ -17668,7 +18203,7 @@
             if (current) {
                 return current.id;
             }
-            var wrapper = new InstanceWrapper$1(info);
+            var wrapper = new InstanceWrapper$1(this.API, info);
             var serverEntry = {
                 id: serverId,
                 methods: {},
@@ -17696,6 +18231,7 @@
             this.callbacks.execute("onServerRemoved", server.instance, reason);
         };
         ClientRepository.prototype.addServerMethod = function (serverId, method) {
+            var _a;
             var server = this.servers[serverId];
             if (!server) {
                 throw new Error("server does not exists");
@@ -17716,6 +18252,7 @@
                 accepts: method.input_signature,
                 returns: method.result_signature,
                 supportsStreaming: typeof method.flags !== "undefined" ? method.flags.streaming : false,
+                flags: (_a = method.flags) !== null && _a !== void 0 ? _a : {},
                 getServers: function () {
                     return that.getServersByMethod(identifier);
                 }
@@ -17724,12 +18261,13 @@
             methodDefinition.display_name = methodDefinition.displayName;
             methodDefinition.version = methodDefinition.version;
             server.methods[method.id] = methodDefinition;
+            var clientMethodDefinition = hideMethodSystemFlags$1(methodDefinition);
             if (!this.methodsCount[identifier]) {
                 this.methodsCount[identifier] = 0;
-                this.callbacks.execute("onMethodAdded", methodDefinition);
+                this.callbacks.execute("onMethodAdded", clientMethodDefinition);
             }
             this.methodsCount[identifier] = this.methodsCount[identifier] + 1;
-            this.callbacks.execute("onServerMethodAdded", server.instance, methodDefinition);
+            this.callbacks.execute("onServerMethodAdded", server.instance, clientMethodDefinition);
             return methodDefinition;
         };
         ClientRepository.prototype.removeServerMethod = function (serverId, methodId) {
@@ -17739,41 +18277,18 @@
             }
             var method = server.methods[methodId];
             delete server.methods[methodId];
+            var clientMethodDefinition = hideMethodSystemFlags$1(method);
             this.methodsCount[method.identifier] = this.methodsCount[method.identifier] - 1;
             if (this.methodsCount[method.identifier] === 0) {
-                this.callbacks.execute("onMethodRemoved", method);
+                this.callbacks.execute("onMethodRemoved", clientMethodDefinition);
             }
-            this.callbacks.execute("onServerMethodRemoved", server.instance, method);
+            this.callbacks.execute("onServerMethodRemoved", server.instance, clientMethodDefinition);
         };
         ClientRepository.prototype.getMethods = function () {
-            var _this = this;
-            var allMethods = {};
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                Object.keys(server.methods).forEach(function (methodId) {
-                    var method = server.methods[methodId];
-                    allMethods[method.identifier] = method;
-                });
-            });
-            var methodsAsArray = Object.keys(allMethods).map(function (id) {
-                return allMethods[id];
-            });
-            return methodsAsArray;
+            return this.extractMethodsFromServers(Object.values(this.servers)).map(hideMethodSystemFlags$1);
         };
         ClientRepository.prototype.getServers = function () {
-            var _this = this;
-            var allServers = [];
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                allServers.push(server);
-            });
-            return allServers;
-        };
-        ClientRepository.prototype.getServerMethodsById = function (serverId) {
-            var server = this.servers[serverId];
-            return Object.keys(server.methods).map(function (id) {
-                return server.methods[id];
-            });
+            return Object.values(this.servers).map(this.hideServerMethodSystemFlags);
         };
         ClientRepository.prototype.onServerAdded = function (callback) {
             var unsubscribeFunc = this.callbacks.add("onServerAdded", callback);
@@ -17817,14 +18332,17 @@
             return unsubscribeFunc;
         };
         ClientRepository.prototype.getServerById = function (id) {
-            return this.servers[id];
+            return this.hideServerMethodSystemFlags(this.servers[id]);
         };
         ClientRepository.prototype.reset = function () {
+            var _a;
             var _this = this;
             Object.keys(this.servers).forEach(function (key) {
                 _this.removeServerById(key, "reset");
             });
-            this.servers = {};
+            this.servers = (_a = {},
+                _a[this.myServer.id] = this.myServer,
+                _a);
             this.methodsCount = {};
         };
         ClientRepository.prototype.createMethodIdentifier = function (methodInfo) {
@@ -17833,13 +18351,10 @@
             return (methodInfo.name + accepts + returns).toLowerCase();
         };
         ClientRepository.prototype.getServersByMethod = function (identifier) {
-            var _this = this;
             var allServers = [];
-            Object.keys(this.servers).forEach(function (serverId) {
-                var server = _this.servers[serverId];
-                Object.keys(server.methods).forEach(function (methodId) {
-                    var methodInfo = server.methods[methodId];
-                    if (methodInfo.identifier === identifier) {
+            Object.values(this.servers).forEach(function (server) {
+                Object.values(server.methods).forEach(function (method) {
+                    if (method.identifier === identifier) {
                         allServers.push(server.instance);
                     }
                 });
@@ -17859,6 +18374,20 @@
                 unsubCalled = true;
                 unsubscribeFunc();
             };
+        };
+        ClientRepository.prototype.hideServerMethodSystemFlags = function (server) {
+            var clientMethods = {};
+            Object.entries(server.methods).forEach(function (_a) {
+                var name = _a[0], method = _a[1];
+                clientMethods[name] = hideMethodSystemFlags$1(method);
+            });
+            return __assign$3(__assign$3({}, server), { methods: clientMethods });
+        };
+        ClientRepository.prototype.extractMethodsFromServers = function (servers) {
+            var methods = Object.values(servers).reduce(function (clientMethods, server) {
+                return __spreadArrays$1(clientMethods, Object.values(server.methods));
+            }, []);
+            return methods;
         };
         return ClientRepository;
     }());
@@ -18185,8 +18714,9 @@
         };
         ServerProtocol.prototype.register = function (repoMethod, isStreaming) {
             var _this = this;
+            var _a;
             var methodDef = repoMethod.definition;
-            var flags = { streaming: isStreaming || false };
+            var flags = Object.assign({}, { metadata: (_a = methodDef.flags) !== null && _a !== void 0 ? _a : {} }, { streaming: isStreaming || false });
             var registerMsg = {
                 type: "register",
                 methods: [{
@@ -18892,9 +19422,9 @@
             if (typeof configuration.waitTimeoutMs !== "number") {
                 configuration.waitTimeoutMs = 30 * 1000;
             }
-            InstanceWrapper$1.API = this;
-            this.instance = new InstanceWrapper$1(undefined, connection).unwrap();
-            this.clientRepository = new ClientRepository$1(configuration.logger.subLogger("cRep"));
+            this.unwrappedInstance = new InstanceWrapper$1(this, undefined, connection);
+            this.instance = this.unwrappedInstance.unwrap();
+            this.clientRepository = new ClientRepository$1(configuration.logger.subLogger("cRep"), this);
             this.serverRepository = new ServerRepository$1();
             var protocolPromise;
             if (connection.protocolVersion === 3) {
@@ -18957,6 +19487,16 @@
         };
         Interop.prototype.invoke = function (methodFilter, argumentObj, target, additionalOptions, success, error) {
             return this.client.invoke(methodFilter, argumentObj, target, additionalOptions, success, error);
+        };
+        Interop.prototype.waitForMethod = function (name) {
+            var pw = new PromiseWrapper$1();
+            var unsubscribe = this.client.methodAdded(function (m) {
+                if (m.name === name) {
+                    unsubscribe();
+                    pw.resolve(m);
+                }
+            });
+            return pw.promise;
         };
         return Interop;
     }());
@@ -19329,7 +19869,7 @@
                 var deprecatedDecorator = function (fn, wrong, proper) {
                     return function () {
                         glue.logger.warn("glue.js - 'glue.agm." + wrong + "' method is deprecated, use 'glue.interop." + proper + "' instead.");
-                        fn.apply(glue.agm, arguments);
+                        return fn.apply(glue.agm, arguments);
                     };
                 };
                 var agmAny = glue.agm;
@@ -19413,6 +19953,3525 @@
         });
     };
 
+    var toStr = Object.prototype.toString;
+
+    var isArguments = function isArguments(value) {
+    	var str = toStr.call(value);
+    	var isArgs = str === '[object Arguments]';
+    	if (!isArgs) {
+    		isArgs = str !== '[object Array]' &&
+    			value !== null &&
+    			typeof value === 'object' &&
+    			typeof value.length === 'number' &&
+    			value.length >= 0 &&
+    			toStr.call(value.callee) === '[object Function]';
+    	}
+    	return isArgs;
+    };
+
+    var keysShim;
+    if (!Object.keys) {
+    	// modified from https://github.com/es-shims/es5-shim
+    	var has = Object.prototype.hasOwnProperty;
+    	var toStr$1 = Object.prototype.toString;
+    	var isArgs = isArguments; // eslint-disable-line global-require
+    	var isEnumerable = Object.prototype.propertyIsEnumerable;
+    	var hasDontEnumBug = !isEnumerable.call({ toString: null }, 'toString');
+    	var hasProtoEnumBug = isEnumerable.call(function () {}, 'prototype');
+    	var dontEnums = [
+    		'toString',
+    		'toLocaleString',
+    		'valueOf',
+    		'hasOwnProperty',
+    		'isPrototypeOf',
+    		'propertyIsEnumerable',
+    		'constructor'
+    	];
+    	var equalsConstructorPrototype = function (o) {
+    		var ctor = o.constructor;
+    		return ctor && ctor.prototype === o;
+    	};
+    	var excludedKeys = {
+    		$applicationCache: true,
+    		$console: true,
+    		$external: true,
+    		$frame: true,
+    		$frameElement: true,
+    		$frames: true,
+    		$innerHeight: true,
+    		$innerWidth: true,
+    		$onmozfullscreenchange: true,
+    		$onmozfullscreenerror: true,
+    		$outerHeight: true,
+    		$outerWidth: true,
+    		$pageXOffset: true,
+    		$pageYOffset: true,
+    		$parent: true,
+    		$scrollLeft: true,
+    		$scrollTop: true,
+    		$scrollX: true,
+    		$scrollY: true,
+    		$self: true,
+    		$webkitIndexedDB: true,
+    		$webkitStorageInfo: true,
+    		$window: true
+    	};
+    	var hasAutomationEqualityBug = (function () {
+    		/* global window */
+    		if (typeof window === 'undefined') { return false; }
+    		for (var k in window) {
+    			try {
+    				if (!excludedKeys['$' + k] && has.call(window, k) && window[k] !== null && typeof window[k] === 'object') {
+    					try {
+    						equalsConstructorPrototype(window[k]);
+    					} catch (e) {
+    						return true;
+    					}
+    				}
+    			} catch (e) {
+    				return true;
+    			}
+    		}
+    		return false;
+    	}());
+    	var equalsConstructorPrototypeIfNotBuggy = function (o) {
+    		/* global window */
+    		if (typeof window === 'undefined' || !hasAutomationEqualityBug) {
+    			return equalsConstructorPrototype(o);
+    		}
+    		try {
+    			return equalsConstructorPrototype(o);
+    		} catch (e) {
+    			return false;
+    		}
+    	};
+
+    	keysShim = function keys(object) {
+    		var isObject = object !== null && typeof object === 'object';
+    		var isFunction = toStr$1.call(object) === '[object Function]';
+    		var isArguments = isArgs(object);
+    		var isString = isObject && toStr$1.call(object) === '[object String]';
+    		var theKeys = [];
+
+    		if (!isObject && !isFunction && !isArguments) {
+    			throw new TypeError('Object.keys called on a non-object');
+    		}
+
+    		var skipProto = hasProtoEnumBug && isFunction;
+    		if (isString && object.length > 0 && !has.call(object, 0)) {
+    			for (var i = 0; i < object.length; ++i) {
+    				theKeys.push(String(i));
+    			}
+    		}
+
+    		if (isArguments && object.length > 0) {
+    			for (var j = 0; j < object.length; ++j) {
+    				theKeys.push(String(j));
+    			}
+    		} else {
+    			for (var name in object) {
+    				if (!(skipProto && name === 'prototype') && has.call(object, name)) {
+    					theKeys.push(String(name));
+    				}
+    			}
+    		}
+
+    		if (hasDontEnumBug) {
+    			var skipConstructor = equalsConstructorPrototypeIfNotBuggy(object);
+
+    			for (var k = 0; k < dontEnums.length; ++k) {
+    				if (!(skipConstructor && dontEnums[k] === 'constructor') && has.call(object, dontEnums[k])) {
+    					theKeys.push(dontEnums[k]);
+    				}
+    			}
+    		}
+    		return theKeys;
+    	};
+    }
+    var implementation = keysShim;
+
+    var slice = Array.prototype.slice;
+
+
+    var origKeys = Object.keys;
+    var keysShim$1 = origKeys ? function keys(o) { return origKeys(o); } : implementation;
+
+    var originalKeys = Object.keys;
+
+    keysShim$1.shim = function shimObjectKeys() {
+    	if (Object.keys) {
+    		var keysWorksWithArguments = (function () {
+    			// Safari 5.0 bug
+    			var args = Object.keys(arguments);
+    			return args && args.length === arguments.length;
+    		}(1, 2));
+    		if (!keysWorksWithArguments) {
+    			Object.keys = function keys(object) { // eslint-disable-line func-name-matching
+    				if (isArguments(object)) {
+    					return originalKeys(slice.call(object));
+    				}
+    				return originalKeys(object);
+    			};
+    		}
+    	} else {
+    		Object.keys = keysShim$1;
+    	}
+    	return Object.keys || keysShim$1;
+    };
+
+    var objectKeys = keysShim$1;
+
+    /* eslint complexity: [2, 18], max-statements: [2, 33] */
+    var shams = function hasSymbols() {
+    	if (typeof Symbol !== 'function' || typeof Object.getOwnPropertySymbols !== 'function') { return false; }
+    	if (typeof Symbol.iterator === 'symbol') { return true; }
+
+    	var obj = {};
+    	var sym = Symbol('test');
+    	var symObj = Object(sym);
+    	if (typeof sym === 'string') { return false; }
+
+    	if (Object.prototype.toString.call(sym) !== '[object Symbol]') { return false; }
+    	if (Object.prototype.toString.call(symObj) !== '[object Symbol]') { return false; }
+
+    	// temp disabled per https://github.com/ljharb/object.assign/issues/17
+    	// if (sym instanceof Symbol) { return false; }
+    	// temp disabled per https://github.com/WebReflection/get-own-property-symbols/issues/4
+    	// if (!(symObj instanceof Symbol)) { return false; }
+
+    	// if (typeof Symbol.prototype.toString !== 'function') { return false; }
+    	// if (String(sym) !== Symbol.prototype.toString.call(sym)) { return false; }
+
+    	var symVal = 42;
+    	obj[sym] = symVal;
+    	for (sym in obj) { return false; } // eslint-disable-line no-restricted-syntax
+    	if (typeof Object.keys === 'function' && Object.keys(obj).length !== 0) { return false; }
+
+    	if (typeof Object.getOwnPropertyNames === 'function' && Object.getOwnPropertyNames(obj).length !== 0) { return false; }
+
+    	var syms = Object.getOwnPropertySymbols(obj);
+    	if (syms.length !== 1 || syms[0] !== sym) { return false; }
+
+    	if (!Object.prototype.propertyIsEnumerable.call(obj, sym)) { return false; }
+
+    	if (typeof Object.getOwnPropertyDescriptor === 'function') {
+    		var descriptor = Object.getOwnPropertyDescriptor(obj, sym);
+    		if (descriptor.value !== symVal || descriptor.enumerable !== true) { return false; }
+    	}
+
+    	return true;
+    };
+
+    var origSymbol = commonjsGlobal.Symbol;
+
+
+    var hasSymbols = function hasNativeSymbols() {
+    	if (typeof origSymbol !== 'function') { return false; }
+    	if (typeof Symbol !== 'function') { return false; }
+    	if (typeof origSymbol('foo') !== 'symbol') { return false; }
+    	if (typeof Symbol('bar') !== 'symbol') { return false; }
+
+    	return shams();
+    };
+
+    /* eslint no-invalid-this: 1 */
+
+    var ERROR_MESSAGE = 'Function.prototype.bind called on incompatible ';
+    var slice$1 = Array.prototype.slice;
+    var toStr$2 = Object.prototype.toString;
+    var funcType = '[object Function]';
+
+    var implementation$1 = function bind(that) {
+        var target = this;
+        if (typeof target !== 'function' || toStr$2.call(target) !== funcType) {
+            throw new TypeError(ERROR_MESSAGE + target);
+        }
+        var args = slice$1.call(arguments, 1);
+
+        var bound;
+        var binder = function () {
+            if (this instanceof bound) {
+                var result = target.apply(
+                    this,
+                    args.concat(slice$1.call(arguments))
+                );
+                if (Object(result) === result) {
+                    return result;
+                }
+                return this;
+            } else {
+                return target.apply(
+                    that,
+                    args.concat(slice$1.call(arguments))
+                );
+            }
+        };
+
+        var boundLength = Math.max(0, target.length - args.length);
+        var boundArgs = [];
+        for (var i = 0; i < boundLength; i++) {
+            boundArgs.push('$' + i);
+        }
+
+        bound = Function('binder', 'return function (' + boundArgs.join(',') + '){ return binder.apply(this,arguments); }')(binder);
+
+        if (target.prototype) {
+            var Empty = function Empty() {};
+            Empty.prototype = target.prototype;
+            bound.prototype = new Empty();
+            Empty.prototype = null;
+        }
+
+        return bound;
+    };
+
+    var functionBind = Function.prototype.bind || implementation$1;
+
+    var src = functionBind.call(Function.call, Object.prototype.hasOwnProperty);
+
+    /* globals
+    	AggregateError,
+    	Atomics,
+    	FinalizationRegistry,
+    	SharedArrayBuffer,
+    	WeakRef,
+    */
+
+    var undefined$1;
+
+    var $SyntaxError = SyntaxError;
+    var $Function = Function;
+    var $TypeError = TypeError;
+
+    // eslint-disable-next-line consistent-return
+    var getEvalledConstructor = function (expressionSyntax) {
+    	try {
+    		// eslint-disable-next-line no-new-func
+    		return Function('"use strict"; return (' + expressionSyntax + ').constructor;')();
+    	} catch (e) {}
+    };
+
+    var $gOPD = Object.getOwnPropertyDescriptor;
+    if ($gOPD) {
+    	try {
+    		$gOPD({}, '');
+    	} catch (e) {
+    		$gOPD = null; // this is IE 8, which has a broken gOPD
+    	}
+    }
+
+    var throwTypeError = function () {
+    	throw new $TypeError();
+    };
+    var ThrowTypeError = $gOPD
+    	? (function () {
+    		try {
+    			// eslint-disable-next-line no-unused-expressions, no-caller, no-restricted-properties
+    			arguments.callee; // IE 8 does not throw here
+    			return throwTypeError;
+    		} catch (calleeThrows) {
+    			try {
+    				// IE 8 throws on Object.getOwnPropertyDescriptor(arguments, '')
+    				return $gOPD(arguments, 'callee').get;
+    			} catch (gOPDthrows) {
+    				return throwTypeError;
+    			}
+    		}
+    	}())
+    	: throwTypeError;
+
+    var hasSymbols$1 = hasSymbols();
+
+    var getProto = Object.getPrototypeOf || function (x) { return x.__proto__; }; // eslint-disable-line no-proto
+
+    var asyncGenFunction = getEvalledConstructor('async function* () {}');
+    var asyncGenFunctionPrototype = asyncGenFunction ? asyncGenFunction.prototype : undefined$1;
+    var asyncGenPrototype = asyncGenFunctionPrototype ? asyncGenFunctionPrototype.prototype : undefined$1;
+
+    var TypedArray = typeof Uint8Array === 'undefined' ? undefined$1 : getProto(Uint8Array);
+
+    var INTRINSICS = {
+    	'%AggregateError%': typeof AggregateError === 'undefined' ? undefined$1 : AggregateError,
+    	'%Array%': Array,
+    	'%ArrayBuffer%': typeof ArrayBuffer === 'undefined' ? undefined$1 : ArrayBuffer,
+    	'%ArrayIteratorPrototype%': hasSymbols$1 ? getProto([][Symbol.iterator]()) : undefined$1,
+    	'%AsyncFromSyncIteratorPrototype%': undefined$1,
+    	'%AsyncFunction%': getEvalledConstructor('async function () {}'),
+    	'%AsyncGenerator%': asyncGenFunctionPrototype,
+    	'%AsyncGeneratorFunction%': asyncGenFunction,
+    	'%AsyncIteratorPrototype%': asyncGenPrototype ? getProto(asyncGenPrototype) : undefined$1,
+    	'%Atomics%': typeof Atomics === 'undefined' ? undefined$1 : Atomics,
+    	'%BigInt%': typeof BigInt === 'undefined' ? undefined$1 : BigInt,
+    	'%Boolean%': Boolean,
+    	'%DataView%': typeof DataView === 'undefined' ? undefined$1 : DataView,
+    	'%Date%': Date,
+    	'%decodeURI%': decodeURI,
+    	'%decodeURIComponent%': decodeURIComponent,
+    	'%encodeURI%': encodeURI,
+    	'%encodeURIComponent%': encodeURIComponent,
+    	'%Error%': Error,
+    	'%eval%': eval, // eslint-disable-line no-eval
+    	'%EvalError%': EvalError,
+    	'%Float32Array%': typeof Float32Array === 'undefined' ? undefined$1 : Float32Array,
+    	'%Float64Array%': typeof Float64Array === 'undefined' ? undefined$1 : Float64Array,
+    	'%FinalizationRegistry%': typeof FinalizationRegistry === 'undefined' ? undefined$1 : FinalizationRegistry,
+    	'%Function%': $Function,
+    	'%GeneratorFunction%': getEvalledConstructor('function* () {}'),
+    	'%Int8Array%': typeof Int8Array === 'undefined' ? undefined$1 : Int8Array,
+    	'%Int16Array%': typeof Int16Array === 'undefined' ? undefined$1 : Int16Array,
+    	'%Int32Array%': typeof Int32Array === 'undefined' ? undefined$1 : Int32Array,
+    	'%isFinite%': isFinite,
+    	'%isNaN%': isNaN,
+    	'%IteratorPrototype%': hasSymbols$1 ? getProto(getProto([][Symbol.iterator]())) : undefined$1,
+    	'%JSON%': typeof JSON === 'object' ? JSON : undefined$1,
+    	'%Map%': typeof Map === 'undefined' ? undefined$1 : Map,
+    	'%MapIteratorPrototype%': typeof Map === 'undefined' || !hasSymbols$1 ? undefined$1 : getProto(new Map()[Symbol.iterator]()),
+    	'%Math%': Math,
+    	'%Number%': Number,
+    	'%Object%': Object,
+    	'%parseFloat%': parseFloat,
+    	'%parseInt%': parseInt,
+    	'%Promise%': typeof Promise === 'undefined' ? undefined$1 : Promise,
+    	'%Proxy%': typeof Proxy === 'undefined' ? undefined$1 : Proxy,
+    	'%RangeError%': RangeError,
+    	'%ReferenceError%': ReferenceError,
+    	'%Reflect%': typeof Reflect === 'undefined' ? undefined$1 : Reflect,
+    	'%RegExp%': RegExp,
+    	'%Set%': typeof Set === 'undefined' ? undefined$1 : Set,
+    	'%SetIteratorPrototype%': typeof Set === 'undefined' || !hasSymbols$1 ? undefined$1 : getProto(new Set()[Symbol.iterator]()),
+    	'%SharedArrayBuffer%': typeof SharedArrayBuffer === 'undefined' ? undefined$1 : SharedArrayBuffer,
+    	'%String%': String,
+    	'%StringIteratorPrototype%': hasSymbols$1 ? getProto(''[Symbol.iterator]()) : undefined$1,
+    	'%Symbol%': hasSymbols$1 ? Symbol : undefined$1,
+    	'%SyntaxError%': $SyntaxError,
+    	'%ThrowTypeError%': ThrowTypeError,
+    	'%TypedArray%': TypedArray,
+    	'%TypeError%': $TypeError,
+    	'%Uint8Array%': typeof Uint8Array === 'undefined' ? undefined$1 : Uint8Array,
+    	'%Uint8ClampedArray%': typeof Uint8ClampedArray === 'undefined' ? undefined$1 : Uint8ClampedArray,
+    	'%Uint16Array%': typeof Uint16Array === 'undefined' ? undefined$1 : Uint16Array,
+    	'%Uint32Array%': typeof Uint32Array === 'undefined' ? undefined$1 : Uint32Array,
+    	'%URIError%': URIError,
+    	'%WeakMap%': typeof WeakMap === 'undefined' ? undefined$1 : WeakMap,
+    	'%WeakRef%': typeof WeakRef === 'undefined' ? undefined$1 : WeakRef,
+    	'%WeakSet%': typeof WeakSet === 'undefined' ? undefined$1 : WeakSet
+    };
+
+    var LEGACY_ALIASES = {
+    	'%ArrayBufferPrototype%': ['ArrayBuffer', 'prototype'],
+    	'%ArrayPrototype%': ['Array', 'prototype'],
+    	'%ArrayProto_entries%': ['Array', 'prototype', 'entries'],
+    	'%ArrayProto_forEach%': ['Array', 'prototype', 'forEach'],
+    	'%ArrayProto_keys%': ['Array', 'prototype', 'keys'],
+    	'%ArrayProto_values%': ['Array', 'prototype', 'values'],
+    	'%AsyncFunctionPrototype%': ['AsyncFunction', 'prototype'],
+    	'%AsyncGenerator%': ['AsyncGeneratorFunction', 'prototype'],
+    	'%AsyncGeneratorPrototype%': ['AsyncGeneratorFunction', 'prototype', 'prototype'],
+    	'%BooleanPrototype%': ['Boolean', 'prototype'],
+    	'%DataViewPrototype%': ['DataView', 'prototype'],
+    	'%DatePrototype%': ['Date', 'prototype'],
+    	'%ErrorPrototype%': ['Error', 'prototype'],
+    	'%EvalErrorPrototype%': ['EvalError', 'prototype'],
+    	'%Float32ArrayPrototype%': ['Float32Array', 'prototype'],
+    	'%Float64ArrayPrototype%': ['Float64Array', 'prototype'],
+    	'%FunctionPrototype%': ['Function', 'prototype'],
+    	'%Generator%': ['GeneratorFunction', 'prototype'],
+    	'%GeneratorPrototype%': ['GeneratorFunction', 'prototype', 'prototype'],
+    	'%Int8ArrayPrototype%': ['Int8Array', 'prototype'],
+    	'%Int16ArrayPrototype%': ['Int16Array', 'prototype'],
+    	'%Int32ArrayPrototype%': ['Int32Array', 'prototype'],
+    	'%JSONParse%': ['JSON', 'parse'],
+    	'%JSONStringify%': ['JSON', 'stringify'],
+    	'%MapPrototype%': ['Map', 'prototype'],
+    	'%NumberPrototype%': ['Number', 'prototype'],
+    	'%ObjectPrototype%': ['Object', 'prototype'],
+    	'%ObjProto_toString%': ['Object', 'prototype', 'toString'],
+    	'%ObjProto_valueOf%': ['Object', 'prototype', 'valueOf'],
+    	'%PromisePrototype%': ['Promise', 'prototype'],
+    	'%PromiseProto_then%': ['Promise', 'prototype', 'then'],
+    	'%Promise_all%': ['Promise', 'all'],
+    	'%Promise_reject%': ['Promise', 'reject'],
+    	'%Promise_resolve%': ['Promise', 'resolve'],
+    	'%RangeErrorPrototype%': ['RangeError', 'prototype'],
+    	'%ReferenceErrorPrototype%': ['ReferenceError', 'prototype'],
+    	'%RegExpPrototype%': ['RegExp', 'prototype'],
+    	'%SetPrototype%': ['Set', 'prototype'],
+    	'%SharedArrayBufferPrototype%': ['SharedArrayBuffer', 'prototype'],
+    	'%StringPrototype%': ['String', 'prototype'],
+    	'%SymbolPrototype%': ['Symbol', 'prototype'],
+    	'%SyntaxErrorPrototype%': ['SyntaxError', 'prototype'],
+    	'%TypedArrayPrototype%': ['TypedArray', 'prototype'],
+    	'%TypeErrorPrototype%': ['TypeError', 'prototype'],
+    	'%Uint8ArrayPrototype%': ['Uint8Array', 'prototype'],
+    	'%Uint8ClampedArrayPrototype%': ['Uint8ClampedArray', 'prototype'],
+    	'%Uint16ArrayPrototype%': ['Uint16Array', 'prototype'],
+    	'%Uint32ArrayPrototype%': ['Uint32Array', 'prototype'],
+    	'%URIErrorPrototype%': ['URIError', 'prototype'],
+    	'%WeakMapPrototype%': ['WeakMap', 'prototype'],
+    	'%WeakSetPrototype%': ['WeakSet', 'prototype']
+    };
+
+
+
+    var $concat = functionBind.call(Function.call, Array.prototype.concat);
+    var $spliceApply = functionBind.call(Function.apply, Array.prototype.splice);
+    var $replace = functionBind.call(Function.call, String.prototype.replace);
+    var $strSlice = functionBind.call(Function.call, String.prototype.slice);
+
+    /* adapted from https://github.com/lodash/lodash/blob/4.17.15/dist/lodash.js#L6735-L6744 */
+    var rePropName = /[^%.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|%$))/g;
+    var reEscapeChar = /\\(\\)?/g; /** Used to match backslashes in property paths. */
+    var stringToPath = function stringToPath(string) {
+    	var first = $strSlice(string, 0, 1);
+    	var last = $strSlice(string, -1);
+    	if (first === '%' && last !== '%') {
+    		throw new $SyntaxError('invalid intrinsic syntax, expected closing `%`');
+    	} else if (last === '%' && first !== '%') {
+    		throw new $SyntaxError('invalid intrinsic syntax, expected opening `%`');
+    	}
+    	var result = [];
+    	$replace(string, rePropName, function (match, number, quote, subString) {
+    		result[result.length] = quote ? $replace(subString, reEscapeChar, '$1') : number || match;
+    	});
+    	return result;
+    };
+    /* end adaptation */
+
+    var getBaseIntrinsic = function getBaseIntrinsic(name, allowMissing) {
+    	var intrinsicName = name;
+    	var alias;
+    	if (src(LEGACY_ALIASES, intrinsicName)) {
+    		alias = LEGACY_ALIASES[intrinsicName];
+    		intrinsicName = '%' + alias[0] + '%';
+    	}
+
+    	if (src(INTRINSICS, intrinsicName)) {
+    		var value = INTRINSICS[intrinsicName];
+    		if (typeof value === 'undefined' && !allowMissing) {
+    			throw new $TypeError('intrinsic ' + name + ' exists, but is not available. Please file an issue!');
+    		}
+
+    		return {
+    			alias: alias,
+    			name: intrinsicName,
+    			value: value
+    		};
+    	}
+
+    	throw new $SyntaxError('intrinsic ' + name + ' does not exist!');
+    };
+
+    var getIntrinsic = function GetIntrinsic(name, allowMissing) {
+    	if (typeof name !== 'string' || name.length === 0) {
+    		throw new $TypeError('intrinsic name must be a non-empty string');
+    	}
+    	if (arguments.length > 1 && typeof allowMissing !== 'boolean') {
+    		throw new $TypeError('"allowMissing" argument must be a boolean');
+    	}
+
+    	var parts = stringToPath(name);
+    	var intrinsicBaseName = parts.length > 0 ? parts[0] : '';
+
+    	var intrinsic = getBaseIntrinsic('%' + intrinsicBaseName + '%', allowMissing);
+    	var intrinsicRealName = intrinsic.name;
+    	var value = intrinsic.value;
+    	var skipFurtherCaching = false;
+
+    	var alias = intrinsic.alias;
+    	if (alias) {
+    		intrinsicBaseName = alias[0];
+    		$spliceApply(parts, $concat([0, 1], alias));
+    	}
+
+    	for (var i = 1, isOwn = true; i < parts.length; i += 1) {
+    		var part = parts[i];
+    		var first = $strSlice(part, 0, 1);
+    		var last = $strSlice(part, -1);
+    		if (
+    			(
+    				(first === '"' || first === "'" || first === '`')
+    				|| (last === '"' || last === "'" || last === '`')
+    			)
+    			&& first !== last
+    		) {
+    			throw new $SyntaxError('property names with quotes must have matching quotes');
+    		}
+    		if (part === 'constructor' || !isOwn) {
+    			skipFurtherCaching = true;
+    		}
+
+    		intrinsicBaseName += '.' + part;
+    		intrinsicRealName = '%' + intrinsicBaseName + '%';
+
+    		if (src(INTRINSICS, intrinsicRealName)) {
+    			value = INTRINSICS[intrinsicRealName];
+    		} else if (value != null) {
+    			if (!(part in value)) {
+    				if (!allowMissing) {
+    					throw new $TypeError('base intrinsic for ' + name + ' exists, but the property is not available.');
+    				}
+    				return void undefined$1;
+    			}
+    			if ($gOPD && (i + 1) >= parts.length) {
+    				var desc = $gOPD(value, part);
+    				isOwn = !!desc;
+
+    				// By convention, when a data property is converted to an accessor
+    				// property to emulate a data property that does not suffer from
+    				// the override mistake, that accessor's getter is marked with
+    				// an `originalValue` property. Here, when we detect this, we
+    				// uphold the illusion by pretending to see that original data
+    				// property, i.e., returning the value rather than the getter
+    				// itself.
+    				if (isOwn && 'get' in desc && !('originalValue' in desc.get)) {
+    					value = desc.get;
+    				} else {
+    					value = value[part];
+    				}
+    			} else {
+    				isOwn = src(value, part);
+    				value = value[part];
+    			}
+
+    			if (isOwn && !skipFurtherCaching) {
+    				INTRINSICS[intrinsicRealName] = value;
+    			}
+    		}
+    	}
+    	return value;
+    };
+
+    var callBind = createCommonjsModule$1(function (module) {
+
+
+
+
+    var $apply = getIntrinsic('%Function.prototype.apply%');
+    var $call = getIntrinsic('%Function.prototype.call%');
+    var $reflectApply = getIntrinsic('%Reflect.apply%', true) || functionBind.call($call, $apply);
+
+    var $gOPD = getIntrinsic('%Object.getOwnPropertyDescriptor%', true);
+    var $defineProperty = getIntrinsic('%Object.defineProperty%', true);
+    var $max = getIntrinsic('%Math.max%');
+
+    if ($defineProperty) {
+    	try {
+    		$defineProperty({}, 'a', { value: 1 });
+    	} catch (e) {
+    		// IE 8 has a broken defineProperty
+    		$defineProperty = null;
+    	}
+    }
+
+    module.exports = function callBind(originalFunction) {
+    	var func = $reflectApply(functionBind, $call, arguments);
+    	if ($gOPD && $defineProperty) {
+    		var desc = $gOPD(func, 'length');
+    		if (desc.configurable) {
+    			// original length, plus the receiver, minus any additional arguments (after the receiver)
+    			$defineProperty(
+    				func,
+    				'length',
+    				{ value: 1 + $max(0, originalFunction.length - (arguments.length - 1)) }
+    			);
+    		}
+    	}
+    	return func;
+    };
+
+    var applyBind = function applyBind() {
+    	return $reflectApply(functionBind, $apply, arguments);
+    };
+
+    if ($defineProperty) {
+    	$defineProperty(module.exports, 'apply', { value: applyBind });
+    } else {
+    	module.exports.apply = applyBind;
+    }
+    });
+
+    var $indexOf = callBind(getIntrinsic('String.prototype.indexOf'));
+
+    var callBound = function callBoundIntrinsic(name, allowMissing) {
+    	var intrinsic = getIntrinsic(name, !!allowMissing);
+    	if (typeof intrinsic === 'function' && $indexOf(name, '.prototype.') > -1) {
+    		return callBind(intrinsic);
+    	}
+    	return intrinsic;
+    };
+
+    var hasToStringTag = typeof Symbol === 'function' && typeof Symbol.toStringTag === 'symbol';
+
+
+    var $toString = callBound('Object.prototype.toString');
+
+    var isStandardArguments = function isArguments(value) {
+    	if (hasToStringTag && value && typeof value === 'object' && Symbol.toStringTag in value) {
+    		return false;
+    	}
+    	return $toString(value) === '[object Arguments]';
+    };
+
+    var isLegacyArguments = function isArguments(value) {
+    	if (isStandardArguments(value)) {
+    		return true;
+    	}
+    	return value !== null &&
+    		typeof value === 'object' &&
+    		typeof value.length === 'number' &&
+    		value.length >= 0 &&
+    		$toString(value) !== '[object Array]' &&
+    		$toString(value.callee) === '[object Function]';
+    };
+
+    var supportsStandardArguments = (function () {
+    	return isStandardArguments(arguments);
+    }());
+
+    isStandardArguments.isLegacyArguments = isLegacyArguments; // for tests
+
+    var isArguments$1 = supportsStandardArguments ? isStandardArguments : isLegacyArguments;
+
+    var hasSymbols$2 = typeof Symbol === 'function' && typeof Symbol('foo') === 'symbol';
+
+    var toStr$3 = Object.prototype.toString;
+    var concat = Array.prototype.concat;
+    var origDefineProperty = Object.defineProperty;
+
+    var isFunction = function (fn) {
+    	return typeof fn === 'function' && toStr$3.call(fn) === '[object Function]';
+    };
+
+    var arePropertyDescriptorsSupported = function () {
+    	var obj = {};
+    	try {
+    		origDefineProperty(obj, 'x', { enumerable: false, value: obj });
+    		// eslint-disable-next-line no-unused-vars, no-restricted-syntax
+    		for (var _ in obj) { // jscs:ignore disallowUnusedVariables
+    			return false;
+    		}
+    		return obj.x === obj;
+    	} catch (e) { /* this is IE 8. */
+    		return false;
+    	}
+    };
+    var supportsDescriptors = origDefineProperty && arePropertyDescriptorsSupported();
+
+    var defineProperty = function (object, name, value, predicate) {
+    	if (name in object && (!isFunction(predicate) || !predicate())) {
+    		return;
+    	}
+    	if (supportsDescriptors) {
+    		origDefineProperty(object, name, {
+    			configurable: true,
+    			enumerable: false,
+    			value: value,
+    			writable: true
+    		});
+    	} else {
+    		object[name] = value;
+    	}
+    };
+
+    var defineProperties = function (object, map) {
+    	var predicates = arguments.length > 2 ? arguments[2] : {};
+    	var props = objectKeys(map);
+    	if (hasSymbols$2) {
+    		props = concat.call(props, Object.getOwnPropertySymbols(map));
+    	}
+    	for (var i = 0; i < props.length; i += 1) {
+    		defineProperty(object, props[i], map[props[i]], predicates[props[i]]);
+    	}
+    };
+
+    defineProperties.supportsDescriptors = !!supportsDescriptors;
+
+    var defineProperties_1 = defineProperties;
+
+    var numberIsNaN = function (value) {
+    	return value !== value;
+    };
+
+    var implementation$2 = function is(a, b) {
+    	if (a === 0 && b === 0) {
+    		return 1 / a === 1 / b;
+    	}
+    	if (a === b) {
+    		return true;
+    	}
+    	if (numberIsNaN(a) && numberIsNaN(b)) {
+    		return true;
+    	}
+    	return false;
+    };
+
+    var polyfill = function getPolyfill() {
+    	return typeof Object.is === 'function' ? Object.is : implementation$2;
+    };
+
+    var shim = function shimObjectIs() {
+    	var polyfill$1 = polyfill();
+    	defineProperties_1(Object, { is: polyfill$1 }, {
+    		is: function testObjectIs() {
+    			return Object.is !== polyfill$1;
+    		}
+    	});
+    	return polyfill$1;
+    };
+
+    var polyfill$1 = callBind(polyfill(), Object);
+
+    defineProperties_1(polyfill$1, {
+    	getPolyfill: polyfill,
+    	implementation: implementation$2,
+    	shim: shim
+    });
+
+    var objectIs = polyfill$1;
+
+    var hasSymbols$3 = hasSymbols();
+    var hasToStringTag$1 = hasSymbols$3 && typeof Symbol.toStringTag === 'symbol';
+    var hasOwnProperty;
+    var regexExec;
+    var isRegexMarker;
+    var badStringifier;
+
+    if (hasToStringTag$1) {
+    	hasOwnProperty = Function.call.bind(Object.prototype.hasOwnProperty);
+    	regexExec = Function.call.bind(RegExp.prototype.exec);
+    	isRegexMarker = {};
+
+    	var throwRegexMarker = function () {
+    		throw isRegexMarker;
+    	};
+    	badStringifier = {
+    		toString: throwRegexMarker,
+    		valueOf: throwRegexMarker
+    	};
+
+    	if (typeof Symbol.toPrimitive === 'symbol') {
+    		badStringifier[Symbol.toPrimitive] = throwRegexMarker;
+    	}
+    }
+
+    var toStr$4 = Object.prototype.toString;
+    var gOPD = Object.getOwnPropertyDescriptor;
+    var regexClass = '[object RegExp]';
+
+    var isRegex = hasToStringTag$1
+    	// eslint-disable-next-line consistent-return
+    	? function isRegex(value) {
+    		if (!value || typeof value !== 'object') {
+    			return false;
+    		}
+
+    		var descriptor = gOPD(value, 'lastIndex');
+    		var hasLastIndexDataProperty = descriptor && hasOwnProperty(descriptor, 'value');
+    		if (!hasLastIndexDataProperty) {
+    			return false;
+    		}
+
+    		try {
+    			regexExec(value, badStringifier);
+    		} catch (e) {
+    			return e === isRegexMarker;
+    		}
+    	}
+    	: function isRegex(value) {
+    		// In older browsers, typeof regex incorrectly returns 'function'
+    		if (!value || (typeof value !== 'object' && typeof value !== 'function')) {
+    			return false;
+    		}
+
+    		return toStr$4.call(value) === regexClass;
+    	};
+
+    /* globals
+    	Atomics,
+    	SharedArrayBuffer,
+    */
+
+    var undefined$2;
+
+    var $TypeError$1 = TypeError;
+
+    var $gOPD$1 = Object.getOwnPropertyDescriptor;
+    if ($gOPD$1) {
+    	try {
+    		$gOPD$1({}, '');
+    	} catch (e) {
+    		$gOPD$1 = null; // this is IE 8, which has a broken gOPD
+    	}
+    }
+
+    var throwTypeError$1 = function () { throw new $TypeError$1(); };
+    var ThrowTypeError$1 = $gOPD$1
+    	? (function () {
+    		try {
+    			// eslint-disable-next-line no-unused-expressions, no-caller, no-restricted-properties
+    			arguments.callee; // IE 8 does not throw here
+    			return throwTypeError$1;
+    		} catch (calleeThrows) {
+    			try {
+    				// IE 8 throws on Object.getOwnPropertyDescriptor(arguments, '')
+    				return $gOPD$1(arguments, 'callee').get;
+    			} catch (gOPDthrows) {
+    				return throwTypeError$1;
+    			}
+    		}
+    	}())
+    	: throwTypeError$1;
+
+    var hasSymbols$4 = hasSymbols();
+
+    var getProto$1 = Object.getPrototypeOf || function (x) { return x.__proto__; }; // eslint-disable-line no-proto
+    var generatorFunction =  undefined$2;
+    var asyncFunction =  undefined$2;
+    var asyncGenFunction$1 =  undefined$2;
+
+    var TypedArray$1 = typeof Uint8Array === 'undefined' ? undefined$2 : getProto$1(Uint8Array);
+
+    var INTRINSICS$1 = {
+    	'%Array%': Array,
+    	'%ArrayBuffer%': typeof ArrayBuffer === 'undefined' ? undefined$2 : ArrayBuffer,
+    	'%ArrayBufferPrototype%': typeof ArrayBuffer === 'undefined' ? undefined$2 : ArrayBuffer.prototype,
+    	'%ArrayIteratorPrototype%': hasSymbols$4 ? getProto$1([][Symbol.iterator]()) : undefined$2,
+    	'%ArrayPrototype%': Array.prototype,
+    	'%ArrayProto_entries%': Array.prototype.entries,
+    	'%ArrayProto_forEach%': Array.prototype.forEach,
+    	'%ArrayProto_keys%': Array.prototype.keys,
+    	'%ArrayProto_values%': Array.prototype.values,
+    	'%AsyncFromSyncIteratorPrototype%': undefined$2,
+    	'%AsyncFunction%': asyncFunction,
+    	'%AsyncFunctionPrototype%':  undefined$2,
+    	'%AsyncGenerator%':  undefined$2,
+    	'%AsyncGeneratorFunction%': asyncGenFunction$1,
+    	'%AsyncGeneratorPrototype%':  undefined$2,
+    	'%AsyncIteratorPrototype%':  undefined$2,
+    	'%Atomics%': typeof Atomics === 'undefined' ? undefined$2 : Atomics,
+    	'%Boolean%': Boolean,
+    	'%BooleanPrototype%': Boolean.prototype,
+    	'%DataView%': typeof DataView === 'undefined' ? undefined$2 : DataView,
+    	'%DataViewPrototype%': typeof DataView === 'undefined' ? undefined$2 : DataView.prototype,
+    	'%Date%': Date,
+    	'%DatePrototype%': Date.prototype,
+    	'%decodeURI%': decodeURI,
+    	'%decodeURIComponent%': decodeURIComponent,
+    	'%encodeURI%': encodeURI,
+    	'%encodeURIComponent%': encodeURIComponent,
+    	'%Error%': Error,
+    	'%ErrorPrototype%': Error.prototype,
+    	'%eval%': eval, // eslint-disable-line no-eval
+    	'%EvalError%': EvalError,
+    	'%EvalErrorPrototype%': EvalError.prototype,
+    	'%Float32Array%': typeof Float32Array === 'undefined' ? undefined$2 : Float32Array,
+    	'%Float32ArrayPrototype%': typeof Float32Array === 'undefined' ? undefined$2 : Float32Array.prototype,
+    	'%Float64Array%': typeof Float64Array === 'undefined' ? undefined$2 : Float64Array,
+    	'%Float64ArrayPrototype%': typeof Float64Array === 'undefined' ? undefined$2 : Float64Array.prototype,
+    	'%Function%': Function,
+    	'%FunctionPrototype%': Function.prototype,
+    	'%Generator%':  undefined$2,
+    	'%GeneratorFunction%': generatorFunction,
+    	'%GeneratorPrototype%':  undefined$2,
+    	'%Int8Array%': typeof Int8Array === 'undefined' ? undefined$2 : Int8Array,
+    	'%Int8ArrayPrototype%': typeof Int8Array === 'undefined' ? undefined$2 : Int8Array.prototype,
+    	'%Int16Array%': typeof Int16Array === 'undefined' ? undefined$2 : Int16Array,
+    	'%Int16ArrayPrototype%': typeof Int16Array === 'undefined' ? undefined$2 : Int8Array.prototype,
+    	'%Int32Array%': typeof Int32Array === 'undefined' ? undefined$2 : Int32Array,
+    	'%Int32ArrayPrototype%': typeof Int32Array === 'undefined' ? undefined$2 : Int32Array.prototype,
+    	'%isFinite%': isFinite,
+    	'%isNaN%': isNaN,
+    	'%IteratorPrototype%': hasSymbols$4 ? getProto$1(getProto$1([][Symbol.iterator]())) : undefined$2,
+    	'%JSON%': typeof JSON === 'object' ? JSON : undefined$2,
+    	'%JSONParse%': typeof JSON === 'object' ? JSON.parse : undefined$2,
+    	'%Map%': typeof Map === 'undefined' ? undefined$2 : Map,
+    	'%MapIteratorPrototype%': typeof Map === 'undefined' || !hasSymbols$4 ? undefined$2 : getProto$1(new Map()[Symbol.iterator]()),
+    	'%MapPrototype%': typeof Map === 'undefined' ? undefined$2 : Map.prototype,
+    	'%Math%': Math,
+    	'%Number%': Number,
+    	'%NumberPrototype%': Number.prototype,
+    	'%Object%': Object,
+    	'%ObjectPrototype%': Object.prototype,
+    	'%ObjProto_toString%': Object.prototype.toString,
+    	'%ObjProto_valueOf%': Object.prototype.valueOf,
+    	'%parseFloat%': parseFloat,
+    	'%parseInt%': parseInt,
+    	'%Promise%': typeof Promise === 'undefined' ? undefined$2 : Promise,
+    	'%PromisePrototype%': typeof Promise === 'undefined' ? undefined$2 : Promise.prototype,
+    	'%PromiseProto_then%': typeof Promise === 'undefined' ? undefined$2 : Promise.prototype.then,
+    	'%Promise_all%': typeof Promise === 'undefined' ? undefined$2 : Promise.all,
+    	'%Promise_reject%': typeof Promise === 'undefined' ? undefined$2 : Promise.reject,
+    	'%Promise_resolve%': typeof Promise === 'undefined' ? undefined$2 : Promise.resolve,
+    	'%Proxy%': typeof Proxy === 'undefined' ? undefined$2 : Proxy,
+    	'%RangeError%': RangeError,
+    	'%RangeErrorPrototype%': RangeError.prototype,
+    	'%ReferenceError%': ReferenceError,
+    	'%ReferenceErrorPrototype%': ReferenceError.prototype,
+    	'%Reflect%': typeof Reflect === 'undefined' ? undefined$2 : Reflect,
+    	'%RegExp%': RegExp,
+    	'%RegExpPrototype%': RegExp.prototype,
+    	'%Set%': typeof Set === 'undefined' ? undefined$2 : Set,
+    	'%SetIteratorPrototype%': typeof Set === 'undefined' || !hasSymbols$4 ? undefined$2 : getProto$1(new Set()[Symbol.iterator]()),
+    	'%SetPrototype%': typeof Set === 'undefined' ? undefined$2 : Set.prototype,
+    	'%SharedArrayBuffer%': typeof SharedArrayBuffer === 'undefined' ? undefined$2 : SharedArrayBuffer,
+    	'%SharedArrayBufferPrototype%': typeof SharedArrayBuffer === 'undefined' ? undefined$2 : SharedArrayBuffer.prototype,
+    	'%String%': String,
+    	'%StringIteratorPrototype%': hasSymbols$4 ? getProto$1(''[Symbol.iterator]()) : undefined$2,
+    	'%StringPrototype%': String.prototype,
+    	'%Symbol%': hasSymbols$4 ? Symbol : undefined$2,
+    	'%SymbolPrototype%': hasSymbols$4 ? Symbol.prototype : undefined$2,
+    	'%SyntaxError%': SyntaxError,
+    	'%SyntaxErrorPrototype%': SyntaxError.prototype,
+    	'%ThrowTypeError%': ThrowTypeError$1,
+    	'%TypedArray%': TypedArray$1,
+    	'%TypedArrayPrototype%': TypedArray$1 ? TypedArray$1.prototype : undefined$2,
+    	'%TypeError%': $TypeError$1,
+    	'%TypeErrorPrototype%': $TypeError$1.prototype,
+    	'%Uint8Array%': typeof Uint8Array === 'undefined' ? undefined$2 : Uint8Array,
+    	'%Uint8ArrayPrototype%': typeof Uint8Array === 'undefined' ? undefined$2 : Uint8Array.prototype,
+    	'%Uint8ClampedArray%': typeof Uint8ClampedArray === 'undefined' ? undefined$2 : Uint8ClampedArray,
+    	'%Uint8ClampedArrayPrototype%': typeof Uint8ClampedArray === 'undefined' ? undefined$2 : Uint8ClampedArray.prototype,
+    	'%Uint16Array%': typeof Uint16Array === 'undefined' ? undefined$2 : Uint16Array,
+    	'%Uint16ArrayPrototype%': typeof Uint16Array === 'undefined' ? undefined$2 : Uint16Array.prototype,
+    	'%Uint32Array%': typeof Uint32Array === 'undefined' ? undefined$2 : Uint32Array,
+    	'%Uint32ArrayPrototype%': typeof Uint32Array === 'undefined' ? undefined$2 : Uint32Array.prototype,
+    	'%URIError%': URIError,
+    	'%URIErrorPrototype%': URIError.prototype,
+    	'%WeakMap%': typeof WeakMap === 'undefined' ? undefined$2 : WeakMap,
+    	'%WeakMapPrototype%': typeof WeakMap === 'undefined' ? undefined$2 : WeakMap.prototype,
+    	'%WeakSet%': typeof WeakSet === 'undefined' ? undefined$2 : WeakSet,
+    	'%WeakSetPrototype%': typeof WeakSet === 'undefined' ? undefined$2 : WeakSet.prototype
+    };
+
+
+    var $replace$1 = functionBind.call(Function.call, String.prototype.replace);
+
+    /* adapted from https://github.com/lodash/lodash/blob/4.17.15/dist/lodash.js#L6735-L6744 */
+    var rePropName$1 = /[^%.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|%$))/g;
+    var reEscapeChar$1 = /\\(\\)?/g; /** Used to match backslashes in property paths. */
+    var stringToPath$1 = function stringToPath(string) {
+    	var result = [];
+    	$replace$1(string, rePropName$1, function (match, number, quote, subString) {
+    		result[result.length] = quote ? $replace$1(subString, reEscapeChar$1, '$1') : (number || match);
+    	});
+    	return result;
+    };
+    /* end adaptation */
+
+    var getBaseIntrinsic$1 = function getBaseIntrinsic(name, allowMissing) {
+    	if (!(name in INTRINSICS$1)) {
+    		throw new SyntaxError('intrinsic ' + name + ' does not exist!');
+    	}
+
+    	// istanbul ignore if // hopefully this is impossible to test :-)
+    	if (typeof INTRINSICS$1[name] === 'undefined' && !allowMissing) {
+    		throw new $TypeError$1('intrinsic ' + name + ' exists, but is not available. Please file an issue!');
+    	}
+
+    	return INTRINSICS$1[name];
+    };
+
+    var GetIntrinsic = function GetIntrinsic(name, allowMissing) {
+    	if (typeof name !== 'string' || name.length === 0) {
+    		throw new TypeError('intrinsic name must be a non-empty string');
+    	}
+    	if (arguments.length > 1 && typeof allowMissing !== 'boolean') {
+    		throw new TypeError('"allowMissing" argument must be a boolean');
+    	}
+
+    	var parts = stringToPath$1(name);
+
+    	var value = getBaseIntrinsic$1('%' + (parts.length > 0 ? parts[0] : '') + '%', allowMissing);
+    	for (var i = 1; i < parts.length; i += 1) {
+    		if (value != null) {
+    			if ($gOPD$1 && (i + 1) >= parts.length) {
+    				var desc = $gOPD$1(value, parts[i]);
+    				if (!allowMissing && !(parts[i] in value)) {
+    					throw new $TypeError$1('base intrinsic for ' + name + ' exists, but the property is not available.');
+    				}
+    				// By convention, when a data property is converted to an accessor
+    				// property to emulate a data property that does not suffer from
+    				// the override mistake, that accessor's getter is marked with
+    				// an `originalValue` property. Here, when we detect this, we
+    				// uphold the illusion by pretending to see that original data
+    				// property, i.e., returning the value rather than the getter
+    				// itself.
+    				value = desc && 'get' in desc && !('originalValue' in desc.get) ? desc.get : value[parts[i]];
+    			} else {
+    				value = value[parts[i]];
+    			}
+    		}
+    	}
+    	return value;
+    };
+
+    var callBind$1 = createCommonjsModule$1(function (module) {
+
+
+
+
+
+    var $apply = GetIntrinsic('%Function.prototype.apply%');
+    var $call = GetIntrinsic('%Function.prototype.call%');
+    var $reflectApply = GetIntrinsic('%Reflect.apply%', true) || functionBind.call($call, $apply);
+
+    var $defineProperty = GetIntrinsic('%Object.defineProperty%', true);
+
+    if ($defineProperty) {
+    	try {
+    		$defineProperty({}, 'a', { value: 1 });
+    	} catch (e) {
+    		// IE 8 has a broken defineProperty
+    		$defineProperty = null;
+    	}
+    }
+
+    module.exports = function callBind() {
+    	return $reflectApply(functionBind, $call, arguments);
+    };
+
+    var applyBind = function applyBind() {
+    	return $reflectApply(functionBind, $apply, arguments);
+    };
+
+    if ($defineProperty) {
+    	$defineProperty(module.exports, 'apply', { value: applyBind });
+    } else {
+    	module.exports.apply = applyBind;
+    }
+    });
+
+    var $Object = Object;
+    var $TypeError$2 = TypeError;
+
+    var implementation$3 = function flags() {
+    	if (this != null && this !== $Object(this)) {
+    		throw new $TypeError$2('RegExp.prototype.flags getter called on non-object');
+    	}
+    	var result = '';
+    	if (this.global) {
+    		result += 'g';
+    	}
+    	if (this.ignoreCase) {
+    		result += 'i';
+    	}
+    	if (this.multiline) {
+    		result += 'm';
+    	}
+    	if (this.dotAll) {
+    		result += 's';
+    	}
+    	if (this.unicode) {
+    		result += 'u';
+    	}
+    	if (this.sticky) {
+    		result += 'y';
+    	}
+    	return result;
+    };
+
+    var supportsDescriptors$1 = defineProperties_1.supportsDescriptors;
+    var $gOPD$2 = Object.getOwnPropertyDescriptor;
+    var $TypeError$3 = TypeError;
+
+    var polyfill$2 = function getPolyfill() {
+    	if (!supportsDescriptors$1) {
+    		throw new $TypeError$3('RegExp.prototype.flags requires a true ES5 environment that supports property descriptors');
+    	}
+    	if ((/a/mig).flags === 'gim') {
+    		var descriptor = $gOPD$2(RegExp.prototype, 'flags');
+    		if (descriptor && typeof descriptor.get === 'function' && typeof (/a/).dotAll === 'boolean') {
+    			return descriptor.get;
+    		}
+    	}
+    	return implementation$3;
+    };
+
+    var supportsDescriptors$2 = defineProperties_1.supportsDescriptors;
+
+    var gOPD$1 = Object.getOwnPropertyDescriptor;
+    var defineProperty$1 = Object.defineProperty;
+    var TypeErr = TypeError;
+    var getProto$2 = Object.getPrototypeOf;
+    var regex = /a/;
+
+    var shim$1 = function shimFlags() {
+    	if (!supportsDescriptors$2 || !getProto$2) {
+    		throw new TypeErr('RegExp.prototype.flags requires a true ES5 environment that supports property descriptors');
+    	}
+    	var polyfill = polyfill$2();
+    	var proto = getProto$2(regex);
+    	var descriptor = gOPD$1(proto, 'flags');
+    	if (!descriptor || descriptor.get !== polyfill) {
+    		defineProperty$1(proto, 'flags', {
+    			configurable: true,
+    			enumerable: false,
+    			get: polyfill
+    		});
+    	}
+    	return polyfill;
+    };
+
+    var flagsBound = callBind$1(implementation$3);
+
+    defineProperties_1(flagsBound, {
+    	getPolyfill: polyfill$2,
+    	implementation: implementation$3,
+    	shim: shim$1
+    });
+
+    var regexp_prototype_flags = flagsBound;
+
+    var toString = {}.toString;
+
+    var isarray = Array.isArray || function (arr) {
+      return toString.call(arr) == '[object Array]';
+    };
+
+    var getDay = Date.prototype.getDay;
+    var tryDateObject = function tryDateGetDayCall(value) {
+    	try {
+    		getDay.call(value);
+    		return true;
+    	} catch (e) {
+    		return false;
+    	}
+    };
+
+    var toStr$5 = Object.prototype.toString;
+    var dateClass = '[object Date]';
+    var hasToStringTag$2 = typeof Symbol === 'function' && typeof Symbol.toStringTag === 'symbol';
+
+    var isDateObject = function isDateObject(value) {
+    	if (typeof value !== 'object' || value === null) {
+    		return false;
+    	}
+    	return hasToStringTag$2 ? tryDateObject(value) : toStr$5.call(value) === dateClass;
+    };
+
+    var strValue = String.prototype.valueOf;
+    var tryStringObject = function tryStringObject(value) {
+    	try {
+    		strValue.call(value);
+    		return true;
+    	} catch (e) {
+    		return false;
+    	}
+    };
+    var toStr$6 = Object.prototype.toString;
+    var strClass = '[object String]';
+    var hasToStringTag$3 = typeof Symbol === 'function' && typeof Symbol.toStringTag === 'symbol';
+
+    var isString = function isString(value) {
+    	if (typeof value === 'string') {
+    		return true;
+    	}
+    	if (typeof value !== 'object') {
+    		return false;
+    	}
+    	return hasToStringTag$3 ? tryStringObject(value) : toStr$6.call(value) === strClass;
+    };
+
+    var numToStr = Number.prototype.toString;
+    var tryNumberObject = function tryNumberObject(value) {
+    	try {
+    		numToStr.call(value);
+    		return true;
+    	} catch (e) {
+    		return false;
+    	}
+    };
+    var toStr$7 = Object.prototype.toString;
+    var numClass = '[object Number]';
+    var hasToStringTag$4 = typeof Symbol === 'function' && typeof Symbol.toStringTag === 'symbol';
+
+    var isNumberObject = function isNumberObject(value) {
+    	if (typeof value === 'number') {
+    		return true;
+    	}
+    	if (typeof value !== 'object') {
+    		return false;
+    	}
+    	return hasToStringTag$4 ? tryNumberObject(value) : toStr$7.call(value) === numClass;
+    };
+
+    var $boolToStr = callBound('Boolean.prototype.toString');
+    var $toString$1 = callBound('Object.prototype.toString');
+
+    var tryBooleanObject = function booleanBrandCheck(value) {
+    	try {
+    		$boolToStr(value);
+    		return true;
+    	} catch (e) {
+    		return false;
+    	}
+    };
+    var boolClass = '[object Boolean]';
+    var hasToStringTag$5 = typeof Symbol === 'function' && typeof Symbol.toStringTag === 'symbol';
+
+    var isBooleanObject = function isBoolean(value) {
+    	if (typeof value === 'boolean') {
+    		return true;
+    	}
+    	if (value === null || typeof value !== 'object') {
+    		return false;
+    	}
+    	return hasToStringTag$5 && Symbol.toStringTag in value ? tryBooleanObject(value) : $toString$1(value) === boolClass;
+    };
+
+    var isSymbol = createCommonjsModule$1(function (module) {
+
+    var toStr = Object.prototype.toString;
+    var hasSymbols$1 = hasSymbols();
+
+    if (hasSymbols$1) {
+    	var symToStr = Symbol.prototype.toString;
+    	var symStringRegex = /^Symbol\(.*\)$/;
+    	var isSymbolObject = function isRealSymbolObject(value) {
+    		if (typeof value.valueOf() !== 'symbol') {
+    			return false;
+    		}
+    		return symStringRegex.test(symToStr.call(value));
+    	};
+
+    	module.exports = function isSymbol(value) {
+    		if (typeof value === 'symbol') {
+    			return true;
+    		}
+    		if (toStr.call(value) !== '[object Symbol]') {
+    			return false;
+    		}
+    		try {
+    			return isSymbolObject(value);
+    		} catch (e) {
+    			return false;
+    		}
+    	};
+    } else {
+
+    	module.exports = function isSymbol(value) {
+    		// this environment does not support Symbols.
+    		return false ;
+    	};
+    }
+    });
+
+    var isBigint = createCommonjsModule$1(function (module) {
+
+    if (typeof BigInt === 'function') {
+    	var bigIntValueOf = BigInt.prototype.valueOf;
+    	var tryBigInt = function tryBigIntObject(value) {
+    		try {
+    			bigIntValueOf.call(value);
+    			return true;
+    		} catch (e) {
+    		}
+    		return false;
+    	};
+
+    	module.exports = function isBigInt(value) {
+    		if (
+    			value === null
+    			|| typeof value === 'undefined'
+    			|| typeof value === 'boolean'
+    			|| typeof value === 'string'
+    			|| typeof value === 'number'
+    			|| typeof value === 'symbol'
+    			|| typeof value === 'function'
+    		) {
+    			return false;
+    		}
+    		if (typeof value === 'bigint') {
+    			return true;
+    		}
+
+    		return tryBigInt(value);
+    	};
+    } else {
+    	module.exports = function isBigInt(value) {
+    		return false ;
+    	};
+    }
+    });
+
+    // eslint-disable-next-line consistent-return
+    var whichBoxedPrimitive = function whichBoxedPrimitive(value) {
+    	// eslint-disable-next-line eqeqeq
+    	if (value == null || (typeof value !== 'object' && typeof value !== 'function')) {
+    		return null;
+    	}
+    	if (isString(value)) {
+    		return 'String';
+    	}
+    	if (isNumberObject(value)) {
+    		return 'Number';
+    	}
+    	if (isBooleanObject(value)) {
+    		return 'Boolean';
+    	}
+    	if (isSymbol(value)) {
+    		return 'Symbol';
+    	}
+    	if (isBigint(value)) {
+    		return 'BigInt';
+    	}
+    };
+
+    var $Map = typeof Map === 'function' && Map.prototype ? Map : null;
+    var $Set = typeof Set === 'function' && Set.prototype ? Set : null;
+
+    var exported;
+
+    if (!$Map) {
+    	// eslint-disable-next-line no-unused-vars
+    	exported = function isMap(x) {
+    		// `Map` is not present in this environment.
+    		return false;
+    	};
+    }
+
+    var $mapHas = $Map ? Map.prototype.has : null;
+    var $setHas = $Set ? Set.prototype.has : null;
+    if (!exported && !$mapHas) {
+    	// eslint-disable-next-line no-unused-vars
+    	exported = function isMap(x) {
+    		// `Map` does not have a `has` method
+    		return false;
+    	};
+    }
+
+    var isMap = exported || function isMap(x) {
+    	if (!x || typeof x !== 'object') {
+    		return false;
+    	}
+    	try {
+    		$mapHas.call(x);
+    		if ($setHas) {
+    			try {
+    				$setHas.call(x);
+    			} catch (e) {
+    				return true;
+    			}
+    		}
+    		return x instanceof $Map; // core-js workaround, pre-v2.5.0
+    	} catch (e) {}
+    	return false;
+    };
+
+    var $Map$1 = typeof Map === 'function' && Map.prototype ? Map : null;
+    var $Set$1 = typeof Set === 'function' && Set.prototype ? Set : null;
+
+    var exported$1;
+
+    if (!$Set$1) {
+    	// eslint-disable-next-line no-unused-vars
+    	exported$1 = function isSet(x) {
+    		// `Set` is not present in this environment.
+    		return false;
+    	};
+    }
+
+    var $mapHas$1 = $Map$1 ? Map.prototype.has : null;
+    var $setHas$1 = $Set$1 ? Set.prototype.has : null;
+    if (!exported$1 && !$setHas$1) {
+    	// eslint-disable-next-line no-unused-vars
+    	exported$1 = function isSet(x) {
+    		// `Set` does not have a `has` method
+    		return false;
+    	};
+    }
+
+    var isSet = exported$1 || function isSet(x) {
+    	if (!x || typeof x !== 'object') {
+    		return false;
+    	}
+    	try {
+    		$setHas$1.call(x);
+    		if ($mapHas$1) {
+    			try {
+    				$mapHas$1.call(x);
+    			} catch (e) {
+    				return true;
+    			}
+    		}
+    		return x instanceof $Set$1; // core-js workaround, pre-v2.5.0
+    	} catch (e) {}
+    	return false;
+    };
+
+    var $WeakMap = typeof WeakMap === 'function' && WeakMap.prototype ? WeakMap : null;
+    var $WeakSet = typeof WeakSet === 'function' && WeakSet.prototype ? WeakSet : null;
+
+    var exported$2;
+
+    if (!$WeakMap) {
+    	// eslint-disable-next-line no-unused-vars
+    	exported$2 = function isWeakMap(x) {
+    		// `WeakMap` is not present in this environment.
+    		return false;
+    	};
+    }
+
+    var $mapHas$2 = $WeakMap ? $WeakMap.prototype.has : null;
+    var $setHas$2 = $WeakSet ? $WeakSet.prototype.has : null;
+    if (!exported$2 && !$mapHas$2) {
+    	// eslint-disable-next-line no-unused-vars
+    	exported$2 = function isWeakMap(x) {
+    		// `WeakMap` does not have a `has` method
+    		return false;
+    	};
+    }
+
+    var isWeakmap = exported$2 || function isWeakMap(x) {
+    	if (!x || typeof x !== 'object') {
+    		return false;
+    	}
+    	try {
+    		$mapHas$2.call(x, $mapHas$2);
+    		if ($setHas$2) {
+    			try {
+    				$setHas$2.call(x, $setHas$2);
+    			} catch (e) {
+    				return true;
+    			}
+    		}
+    		return x instanceof $WeakMap; // core-js workaround, pre-v3
+    	} catch (e) {}
+    	return false;
+    };
+
+    var isWeakset = createCommonjsModule$1(function (module) {
+
+    var $WeakMap = typeof WeakMap === 'function' && WeakMap.prototype ? WeakMap : null;
+    var $WeakSet = typeof WeakSet === 'function' && WeakSet.prototype ? WeakSet : null;
+
+    var exported;
+
+    if (!$WeakMap) {
+    	// eslint-disable-next-line no-unused-vars
+    	exported = function isWeakSet(x) {
+    		// `WeakSet` is not present in this environment.
+    		return false;
+    	};
+    }
+
+    var $mapHas = $WeakMap ? $WeakMap.prototype.has : null;
+    var $setHas = $WeakSet ? $WeakSet.prototype.has : null;
+    if (!exported && !$setHas) {
+    	// eslint-disable-next-line no-unused-vars
+    	module.exports = function isWeakSet(x) {
+    		// `WeakSet` does not have a `has` method
+    		return false;
+    	};
+    }
+
+    module.exports = exported || function isWeakSet(x) {
+    	if (!x || typeof x !== 'object') {
+    		return false;
+    	}
+    	try {
+    		$setHas.call(x, $setHas);
+    		if ($mapHas) {
+    			try {
+    				$mapHas.call(x, $mapHas);
+    			} catch (e) {
+    				return true;
+    			}
+    		}
+    		return x instanceof $WeakSet; // core-js workaround, pre-v3
+    	} catch (e) {}
+    	return false;
+    };
+    });
+
+    var whichCollection = function whichCollection(value) {
+    	if (value && typeof value === 'object') {
+    		if (isMap(value)) {
+    			return 'Map';
+    		}
+    		if (isSet(value)) {
+    			return 'Set';
+    		}
+    		if (isWeakmap(value)) {
+    			return 'WeakMap';
+    		}
+    		if (isWeakset(value)) {
+    			return 'WeakSet';
+    		}
+    	}
+    	return false;
+    };
+
+    var esGetIterator = createCommonjsModule$1(function (module) {
+
+    /* eslint global-require: 0 */
+    // the code is structured this way so that bundlers can
+    // alias out `has-symbols` to `() => true` or `() => false` if your target
+    // environments' Symbol capabilities are known, and then use
+    // dead code elimination on the rest of this module.
+    //
+    // Similarly, `isarray` can be aliased to `Array.isArray` if
+    // available in all target environments.
+
+
+
+    if (hasSymbols() || shams()) {
+    	var $iterator = Symbol.iterator;
+    	// Symbol is available natively or shammed
+    	// natively:
+    	//  - Chrome >= 38
+    	//  - Edge 12-14?, Edge >= 15 for sure
+    	//  - FF >= 36
+    	//  - Safari >= 9
+    	//  - node >= 0.12
+    	module.exports = function getIterator(iterable) {
+    		// alternatively, `iterable[$iterator]?.()`
+    		if (iterable != null && typeof iterable[$iterator] !== 'undefined') {
+    			return iterable[$iterator]();
+    		}
+    		if (isArguments$1(iterable)) {
+    			// arguments objects lack Symbol.iterator
+    			// - node 0.12
+    			return Array.prototype[$iterator].call(iterable);
+    		}
+    	};
+    } else {
+    	// Symbol is not available, native or shammed
+    	var isArray = isarray;
+    	var isString$1 = isString;
+    	var GetIntrinsic = getIntrinsic;
+    	var $Map = GetIntrinsic('%Map%', true);
+    	var $Set = GetIntrinsic('%Set%', true);
+    	var callBound$1 = callBound;
+    	var $arrayPush = callBound$1('Array.prototype.push');
+    	var $charCodeAt = callBound$1('String.prototype.charCodeAt');
+    	var $stringSlice = callBound$1('String.prototype.slice');
+
+    	var advanceStringIndex = function advanceStringIndex(S, index) {
+    		var length = S.length;
+    		if ((index + 1) >= length) {
+    			return index + 1;
+    		}
+
+    		var first = $charCodeAt(S, index);
+    		if (first < 0xD800 || first > 0xDBFF) {
+    			return index + 1;
+    		}
+
+    		var second = $charCodeAt(S, index + 1);
+    		if (second < 0xDC00 || second > 0xDFFF) {
+    			return index + 1;
+    		}
+
+    		return index + 2;
+    	};
+
+    	var getArrayIterator = function getArrayIterator(arraylike) {
+    		var i = 0;
+    		return {
+    			next: function next() {
+    				var done = i >= arraylike.length;
+    				var value;
+    				if (!done) {
+    					value = arraylike[i];
+    					i += 1;
+    				}
+    				return {
+    					done: done,
+    					value: value
+    				};
+    			}
+    		};
+    	};
+
+    	var getNonCollectionIterator = function getNonCollectionIterator(iterable, noPrimordialCollections) {
+    		if (isArray(iterable) || isArguments$1(iterable)) {
+    			return getArrayIterator(iterable);
+    		}
+    		if (isString$1(iterable)) {
+    			var i = 0;
+    			return {
+    				next: function next() {
+    					var nextIndex = advanceStringIndex(iterable, i);
+    					var value = $stringSlice(iterable, i, nextIndex);
+    					i = nextIndex;
+    					return {
+    						done: nextIndex > iterable.length,
+    						value: value
+    					};
+    				}
+    			};
+    		}
+
+    		// es6-shim and es-shims' es-map use a string "_es6-shim iterator_" property on different iterables, such as MapIterator.
+    		if (noPrimordialCollections && typeof iterable['_es6-shim iterator_'] !== 'undefined') {
+    			return iterable['_es6-shim iterator_']();
+    		}
+    	};
+
+    	if (!$Map && !$Set) {
+    		// the only language iterables are Array, String, arguments
+    		// - Safari <= 6.0
+    		// - Chrome < 38
+    		// - node < 0.12
+    		// - FF < 13
+    		// - IE < 11
+    		// - Edge < 11
+
+    		module.exports = function getIterator(iterable) {
+    			if (iterable != null) {
+    				return getNonCollectionIterator(iterable, true);
+    			}
+    		};
+    	} else {
+    		// either Map or Set are available, but Symbol is not
+    		// - es6-shim on an ES5 browser
+    		// - Safari 6.2 (maybe 6.1?)
+    		// - FF v[13, 36)
+    		// - IE 11
+    		// - Edge 11
+    		// - Safari v[6, 9)
+
+    		var isMap$1 = isMap;
+    		var isSet$1 = isSet;
+
+    		// Firefox >= 27, IE 11, Safari 6.2 - 9, Edge 11, es6-shim in older envs, all have forEach
+    		var $mapForEach = callBound$1('Map.prototype.forEach', true);
+    		var $setForEach = callBound$1('Set.prototype.forEach', true);
+    		if (typeof process === 'undefined' || !process.versions || !process.versions.node) { // "if is not node"
+
+    			// Firefox 17 - 26 has `.iterator()`, whose iterator `.next()` either
+    			// returns a value, or throws a StopIteration object. These browsers
+    			// do not have any other mechanism for iteration.
+    			var $mapIterator = callBound$1('Map.prototype.iterator', true);
+    			var $setIterator = callBound$1('Set.prototype.iterator', true);
+    			var getStopIterationIterator = function (iterator) {
+    				var done = false;
+    				return {
+    					next: function next() {
+    						try {
+    							return {
+    								done: done,
+    								value: done ? undefined : iterator.next()
+    							};
+    						} catch (e) {
+    							done = true;
+    							return {
+    								done: true,
+    								value: undefined
+    							};
+    						}
+    					}
+    				};
+    			};
+    		}
+    		// Firefox 27-35, and some older es6-shim versions, use a string "@@iterator" property
+    		// this returns a proper iterator object, so we should use it instead of forEach.
+    		// newer es6-shim versions use a string "_es6-shim iterator_" property.
+    		var $mapAtAtIterator = callBound$1('Map.prototype.@@iterator', true) || callBound$1('Map.prototype._es6-shim iterator_', true);
+    		var $setAtAtIterator = callBound$1('Set.prototype.@@iterator', true) || callBound$1('Set.prototype._es6-shim iterator_', true);
+
+    		var getCollectionIterator = function getCollectionIterator(iterable) {
+    			if (isMap$1(iterable)) {
+    				if ($mapIterator) {
+    					return getStopIterationIterator($mapIterator(iterable));
+    				}
+    				if ($mapAtAtIterator) {
+    					return $mapAtAtIterator(iterable);
+    				}
+    				if ($mapForEach) {
+    					var entries = [];
+    					$mapForEach(iterable, function (v, k) {
+    						$arrayPush(entries, [k, v]);
+    					});
+    					return getArrayIterator(entries);
+    				}
+    			}
+    			if (isSet$1(iterable)) {
+    				if ($setIterator) {
+    					return getStopIterationIterator($setIterator(iterable));
+    				}
+    				if ($setAtAtIterator) {
+    					return $setAtAtIterator(iterable);
+    				}
+    				if ($setForEach) {
+    					var values = [];
+    					$setForEach(iterable, function (v) {
+    						$arrayPush(values, v);
+    					});
+    					return getArrayIterator(values);
+    				}
+    			}
+    		};
+
+    		module.exports = function getIterator(iterable) {
+    			return getCollectionIterator(iterable) || getNonCollectionIterator(iterable);
+    		};
+    	}
+    }
+    });
+
+    var _nodeResolve_empty = {};
+
+    var _nodeResolve_empty$1 = /*#__PURE__*/Object.freeze({
+        __proto__: null,
+        'default': _nodeResolve_empty
+    });
+
+    var require$$0 = /*@__PURE__*/getAugmentedNamespace(_nodeResolve_empty$1);
+
+    var hasMap = typeof Map === 'function' && Map.prototype;
+    var mapSizeDescriptor = Object.getOwnPropertyDescriptor && hasMap ? Object.getOwnPropertyDescriptor(Map.prototype, 'size') : null;
+    var mapSize = hasMap && mapSizeDescriptor && typeof mapSizeDescriptor.get === 'function' ? mapSizeDescriptor.get : null;
+    var mapForEach = hasMap && Map.prototype.forEach;
+    var hasSet = typeof Set === 'function' && Set.prototype;
+    var setSizeDescriptor = Object.getOwnPropertyDescriptor && hasSet ? Object.getOwnPropertyDescriptor(Set.prototype, 'size') : null;
+    var setSize = hasSet && setSizeDescriptor && typeof setSizeDescriptor.get === 'function' ? setSizeDescriptor.get : null;
+    var setForEach = hasSet && Set.prototype.forEach;
+    var hasWeakMap = typeof WeakMap === 'function' && WeakMap.prototype;
+    var weakMapHas = hasWeakMap ? WeakMap.prototype.has : null;
+    var hasWeakSet = typeof WeakSet === 'function' && WeakSet.prototype;
+    var weakSetHas = hasWeakSet ? WeakSet.prototype.has : null;
+    var booleanValueOf = Boolean.prototype.valueOf;
+    var objectToString = Object.prototype.toString;
+    var functionToString = Function.prototype.toString;
+    var match = String.prototype.match;
+    var bigIntValueOf = typeof BigInt === 'function' ? BigInt.prototype.valueOf : null;
+    var gOPS = Object.getOwnPropertySymbols;
+    var symToString = typeof Symbol === 'function' ? Symbol.prototype.toString : null;
+    var isEnumerable$1 = Object.prototype.propertyIsEnumerable;
+
+    var inspectCustom = require$$0.custom;
+    var inspectSymbol = inspectCustom && isSymbol$1(inspectCustom) ? inspectCustom : null;
+
+    var objectInspect = function inspect_(obj, options, depth, seen) {
+        var opts = options || {};
+
+        if (has$1(opts, 'quoteStyle') && (opts.quoteStyle !== 'single' && opts.quoteStyle !== 'double')) {
+            throw new TypeError('option "quoteStyle" must be "single" or "double"');
+        }
+        if (
+            has$1(opts, 'maxStringLength') && (typeof opts.maxStringLength === 'number'
+                ? opts.maxStringLength < 0 && opts.maxStringLength !== Infinity
+                : opts.maxStringLength !== null
+            )
+        ) {
+            throw new TypeError('option "maxStringLength", if provided, must be a positive integer, Infinity, or `null`');
+        }
+        var customInspect = has$1(opts, 'customInspect') ? opts.customInspect : true;
+        if (typeof customInspect !== 'boolean') {
+            throw new TypeError('option "customInspect", if provided, must be `true` or `false`');
+        }
+
+        if (
+            has$1(opts, 'indent')
+            && opts.indent !== null
+            && opts.indent !== '\t'
+            && !(parseInt(opts.indent, 10) === opts.indent && opts.indent > 0)
+        ) {
+            throw new TypeError('options "indent" must be "\\t", an integer > 0, or `null`');
+        }
+
+        if (typeof obj === 'undefined') {
+            return 'undefined';
+        }
+        if (obj === null) {
+            return 'null';
+        }
+        if (typeof obj === 'boolean') {
+            return obj ? 'true' : 'false';
+        }
+
+        if (typeof obj === 'string') {
+            return inspectString(obj, opts);
+        }
+        if (typeof obj === 'number') {
+            if (obj === 0) {
+                return Infinity / obj > 0 ? '0' : '-0';
+            }
+            return String(obj);
+        }
+        if (typeof obj === 'bigint') {
+            return String(obj) + 'n';
+        }
+
+        var maxDepth = typeof opts.depth === 'undefined' ? 5 : opts.depth;
+        if (typeof depth === 'undefined') { depth = 0; }
+        if (depth >= maxDepth && maxDepth > 0 && typeof obj === 'object') {
+            return isArray(obj) ? '[Array]' : '[Object]';
+        }
+
+        var indent = getIndent(opts, depth);
+
+        if (typeof seen === 'undefined') {
+            seen = [];
+        } else if (indexOf(seen, obj) >= 0) {
+            return '[Circular]';
+        }
+
+        function inspect(value, from, noIndent) {
+            if (from) {
+                seen = seen.slice();
+                seen.push(from);
+            }
+            if (noIndent) {
+                var newOpts = {
+                    depth: opts.depth
+                };
+                if (has$1(opts, 'quoteStyle')) {
+                    newOpts.quoteStyle = opts.quoteStyle;
+                }
+                return inspect_(value, newOpts, depth + 1, seen);
+            }
+            return inspect_(value, opts, depth + 1, seen);
+        }
+
+        if (typeof obj === 'function') {
+            var name = nameOf(obj);
+            var keys = arrObjKeys(obj, inspect);
+            return '[Function' + (name ? ': ' + name : ' (anonymous)') + ']' + (keys.length > 0 ? ' { ' + keys.join(', ') + ' }' : '');
+        }
+        if (isSymbol$1(obj)) {
+            var symString = symToString.call(obj);
+            return typeof obj === 'object' ? markBoxed(symString) : symString;
+        }
+        if (isElement(obj)) {
+            var s = '<' + String(obj.nodeName).toLowerCase();
+            var attrs = obj.attributes || [];
+            for (var i = 0; i < attrs.length; i++) {
+                s += ' ' + attrs[i].name + '=' + wrapQuotes(quote(attrs[i].value), 'double', opts);
+            }
+            s += '>';
+            if (obj.childNodes && obj.childNodes.length) { s += '...'; }
+            s += '</' + String(obj.nodeName).toLowerCase() + '>';
+            return s;
+        }
+        if (isArray(obj)) {
+            if (obj.length === 0) { return '[]'; }
+            var xs = arrObjKeys(obj, inspect);
+            if (indent && !singleLineValues(xs)) {
+                return '[' + indentedJoin(xs, indent) + ']';
+            }
+            return '[ ' + xs.join(', ') + ' ]';
+        }
+        if (isError(obj)) {
+            var parts = arrObjKeys(obj, inspect);
+            if (parts.length === 0) { return '[' + String(obj) + ']'; }
+            return '{ [' + String(obj) + '] ' + parts.join(', ') + ' }';
+        }
+        if (typeof obj === 'object' && customInspect) {
+            if (inspectSymbol && typeof obj[inspectSymbol] === 'function') {
+                return obj[inspectSymbol]();
+            } else if (typeof obj.inspect === 'function') {
+                return obj.inspect();
+            }
+        }
+        if (isMap$1(obj)) {
+            var mapParts = [];
+            mapForEach.call(obj, function (value, key) {
+                mapParts.push(inspect(key, obj, true) + ' => ' + inspect(value, obj));
+            });
+            return collectionOf('Map', mapSize.call(obj), mapParts, indent);
+        }
+        if (isSet$1(obj)) {
+            var setParts = [];
+            setForEach.call(obj, function (value) {
+                setParts.push(inspect(value, obj));
+            });
+            return collectionOf('Set', setSize.call(obj), setParts, indent);
+        }
+        if (isWeakMap(obj)) {
+            return weakCollectionOf('WeakMap');
+        }
+        if (isWeakSet(obj)) {
+            return weakCollectionOf('WeakSet');
+        }
+        if (isNumber(obj)) {
+            return markBoxed(inspect(Number(obj)));
+        }
+        if (isBigInt(obj)) {
+            return markBoxed(inspect(bigIntValueOf.call(obj)));
+        }
+        if (isBoolean(obj)) {
+            return markBoxed(booleanValueOf.call(obj));
+        }
+        if (isString$1(obj)) {
+            return markBoxed(inspect(String(obj)));
+        }
+        if (!isDate(obj) && !isRegExp(obj)) {
+            var ys = arrObjKeys(obj, inspect);
+            if (ys.length === 0) { return '{}'; }
+            if (indent) {
+                return '{' + indentedJoin(ys, indent) + '}';
+            }
+            return '{ ' + ys.join(', ') + ' }';
+        }
+        return String(obj);
+    };
+
+    function wrapQuotes(s, defaultStyle, opts) {
+        var quoteChar = (opts.quoteStyle || defaultStyle) === 'double' ? '"' : "'";
+        return quoteChar + s + quoteChar;
+    }
+
+    function quote(s) {
+        return String(s).replace(/"/g, '&quot;');
+    }
+
+    function isArray(obj) { return toStr$8(obj) === '[object Array]'; }
+    function isDate(obj) { return toStr$8(obj) === '[object Date]'; }
+    function isRegExp(obj) { return toStr$8(obj) === '[object RegExp]'; }
+    function isError(obj) { return toStr$8(obj) === '[object Error]'; }
+    function isSymbol$1(obj) { return toStr$8(obj) === '[object Symbol]'; }
+    function isString$1(obj) { return toStr$8(obj) === '[object String]'; }
+    function isNumber(obj) { return toStr$8(obj) === '[object Number]'; }
+    function isBigInt(obj) { return toStr$8(obj) === '[object BigInt]'; }
+    function isBoolean(obj) { return toStr$8(obj) === '[object Boolean]'; }
+
+    var hasOwn = Object.prototype.hasOwnProperty || function (key) { return key in this; };
+    function has$1(obj, key) {
+        return hasOwn.call(obj, key);
+    }
+
+    function toStr$8(obj) {
+        return objectToString.call(obj);
+    }
+
+    function nameOf(f) {
+        if (f.name) { return f.name; }
+        var m = match.call(functionToString.call(f), /^function\s*([\w$]+)/);
+        if (m) { return m[1]; }
+        return null;
+    }
+
+    function indexOf(xs, x) {
+        if (xs.indexOf) { return xs.indexOf(x); }
+        for (var i = 0, l = xs.length; i < l; i++) {
+            if (xs[i] === x) { return i; }
+        }
+        return -1;
+    }
+
+    function isMap$1(x) {
+        if (!mapSize || !x || typeof x !== 'object') {
+            return false;
+        }
+        try {
+            mapSize.call(x);
+            try {
+                setSize.call(x);
+            } catch (s) {
+                return true;
+            }
+            return x instanceof Map; // core-js workaround, pre-v2.5.0
+        } catch (e) {}
+        return false;
+    }
+
+    function isWeakMap(x) {
+        if (!weakMapHas || !x || typeof x !== 'object') {
+            return false;
+        }
+        try {
+            weakMapHas.call(x, weakMapHas);
+            try {
+                weakSetHas.call(x, weakSetHas);
+            } catch (s) {
+                return true;
+            }
+            return x instanceof WeakMap; // core-js workaround, pre-v2.5.0
+        } catch (e) {}
+        return false;
+    }
+
+    function isSet$1(x) {
+        if (!setSize || !x || typeof x !== 'object') {
+            return false;
+        }
+        try {
+            setSize.call(x);
+            try {
+                mapSize.call(x);
+            } catch (m) {
+                return true;
+            }
+            return x instanceof Set; // core-js workaround, pre-v2.5.0
+        } catch (e) {}
+        return false;
+    }
+
+    function isWeakSet(x) {
+        if (!weakSetHas || !x || typeof x !== 'object') {
+            return false;
+        }
+        try {
+            weakSetHas.call(x, weakSetHas);
+            try {
+                weakMapHas.call(x, weakMapHas);
+            } catch (s) {
+                return true;
+            }
+            return x instanceof WeakSet; // core-js workaround, pre-v2.5.0
+        } catch (e) {}
+        return false;
+    }
+
+    function isElement(x) {
+        if (!x || typeof x !== 'object') { return false; }
+        if (typeof HTMLElement !== 'undefined' && x instanceof HTMLElement) {
+            return true;
+        }
+        return typeof x.nodeName === 'string' && typeof x.getAttribute === 'function';
+    }
+
+    function inspectString(str, opts) {
+        if (str.length > opts.maxStringLength) {
+            var remaining = str.length - opts.maxStringLength;
+            var trailer = '... ' + remaining + ' more character' + (remaining > 1 ? 's' : '');
+            return inspectString(str.slice(0, opts.maxStringLength), opts) + trailer;
+        }
+        // eslint-disable-next-line no-control-regex
+        var s = str.replace(/(['\\])/g, '\\$1').replace(/[\x00-\x1f]/g, lowbyte);
+        return wrapQuotes(s, 'single', opts);
+    }
+
+    function lowbyte(c) {
+        var n = c.charCodeAt(0);
+        var x = {
+            8: 'b',
+            9: 't',
+            10: 'n',
+            12: 'f',
+            13: 'r'
+        }[n];
+        if (x) { return '\\' + x; }
+        return '\\x' + (n < 0x10 ? '0' : '') + n.toString(16).toUpperCase();
+    }
+
+    function markBoxed(str) {
+        return 'Object(' + str + ')';
+    }
+
+    function weakCollectionOf(type) {
+        return type + ' { ? }';
+    }
+
+    function collectionOf(type, size, entries, indent) {
+        var joinedEntries = indent ? indentedJoin(entries, indent) : entries.join(', ');
+        return type + ' (' + size + ') {' + joinedEntries + '}';
+    }
+
+    function singleLineValues(xs) {
+        for (var i = 0; i < xs.length; i++) {
+            if (indexOf(xs[i], '\n') >= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function getIndent(opts, depth) {
+        var baseIndent;
+        if (opts.indent === '\t') {
+            baseIndent = '\t';
+        } else if (typeof opts.indent === 'number' && opts.indent > 0) {
+            baseIndent = Array(opts.indent + 1).join(' ');
+        } else {
+            return null;
+        }
+        return {
+            base: baseIndent,
+            prev: Array(depth + 1).join(baseIndent)
+        };
+    }
+
+    function indentedJoin(xs, indent) {
+        if (xs.length === 0) { return ''; }
+        var lineJoiner = '\n' + indent.prev + indent.base;
+        return lineJoiner + xs.join(',' + lineJoiner) + '\n' + indent.prev;
+    }
+
+    function arrObjKeys(obj, inspect) {
+        var isArr = isArray(obj);
+        var xs = [];
+        if (isArr) {
+            xs.length = obj.length;
+            for (var i = 0; i < obj.length; i++) {
+                xs[i] = has$1(obj, i) ? inspect(obj[i], obj) : '';
+            }
+        }
+        for (var key in obj) { // eslint-disable-line no-restricted-syntax
+            if (!has$1(obj, key)) { continue; } // eslint-disable-line no-restricted-syntax, no-continue
+            if (isArr && String(Number(key)) === key && key < obj.length) { continue; } // eslint-disable-line no-restricted-syntax, no-continue
+            if ((/[^\w$]/).test(key)) {
+                xs.push(inspect(key, obj) + ': ' + inspect(obj[key], obj));
+            } else {
+                xs.push(key + ': ' + inspect(obj[key], obj));
+            }
+        }
+        if (typeof gOPS === 'function') {
+            var syms = gOPS(obj);
+            for (var j = 0; j < syms.length; j++) {
+                if (isEnumerable$1.call(obj, syms[j])) {
+                    xs.push('[' + inspect(syms[j]) + ']: ' + inspect(obj[syms[j]], obj));
+                }
+            }
+        }
+        return xs;
+    }
+
+    var $TypeError$4 = getIntrinsic('%TypeError%');
+    var $WeakMap$1 = getIntrinsic('%WeakMap%', true);
+    var $Map$2 = getIntrinsic('%Map%', true);
+
+    var $weakMapGet = callBound('WeakMap.prototype.get', true);
+    var $weakMapSet = callBound('WeakMap.prototype.set', true);
+    var $weakMapHas = callBound('WeakMap.prototype.has', true);
+    var $mapGet = callBound('Map.prototype.get', true);
+    var $mapSet = callBound('Map.prototype.set', true);
+    var $mapHas$3 = callBound('Map.prototype.has', true);
+
+    /*
+     * This function traverses the list returning the node corresponding to the
+     * given key.
+     *
+     * That node is also moved to the head of the list, so that if it's accessed
+     * again we don't need to traverse the whole list. By doing so, all the recently
+     * used nodes can be accessed relatively quickly.
+     */
+    var listGetNode = function (list, key) { // eslint-disable-line consistent-return
+    	for (var prev = list, curr; (curr = prev.next) !== null; prev = curr) {
+    		if (curr.key === key) {
+    			prev.next = curr.next;
+    			curr.next = list.next;
+    			list.next = curr; // eslint-disable-line no-param-reassign
+    			return curr;
+    		}
+    	}
+    };
+
+    var listGet = function (objects, key) {
+    	var node = listGetNode(objects, key);
+    	return node && node.value;
+    };
+    var listSet = function (objects, key, value) {
+    	var node = listGetNode(objects, key);
+    	if (node) {
+    		node.value = value;
+    	} else {
+    		// Prepend the new node to the beginning of the list
+    		objects.next = { // eslint-disable-line no-param-reassign
+    			key: key,
+    			next: objects.next,
+    			value: value
+    		};
+    	}
+    };
+    var listHas = function (objects, key) {
+    	return !!listGetNode(objects, key);
+    };
+
+    var sideChannel = function getSideChannel() {
+    	var $wm;
+    	var $m;
+    	var $o;
+    	var channel = {
+    		assert: function (key) {
+    			if (!channel.has(key)) {
+    				throw new $TypeError$4('Side channel does not contain ' + objectInspect(key));
+    			}
+    		},
+    		get: function (key) { // eslint-disable-line consistent-return
+    			if ($WeakMap$1 && key && (typeof key === 'object' || typeof key === 'function')) {
+    				if ($wm) {
+    					return $weakMapGet($wm, key);
+    				}
+    			} else if ($Map$2) {
+    				if ($m) {
+    					return $mapGet($m, key);
+    				}
+    			} else {
+    				if ($o) { // eslint-disable-line no-lonely-if
+    					return listGet($o, key);
+    				}
+    			}
+    		},
+    		has: function (key) {
+    			if ($WeakMap$1 && key && (typeof key === 'object' || typeof key === 'function')) {
+    				if ($wm) {
+    					return $weakMapHas($wm, key);
+    				}
+    			} else if ($Map$2) {
+    				if ($m) {
+    					return $mapHas$3($m, key);
+    				}
+    			} else {
+    				if ($o) { // eslint-disable-line no-lonely-if
+    					return listHas($o, key);
+    				}
+    			}
+    			return false;
+    		},
+    		set: function (key, value) {
+    			if ($WeakMap$1 && key && (typeof key === 'object' || typeof key === 'function')) {
+    				if (!$wm) {
+    					$wm = new $WeakMap$1();
+    				}
+    				$weakMapSet($wm, key, value);
+    			} else if ($Map$2) {
+    				if (!$m) {
+    					$m = new $Map$2();
+    				}
+    				$mapSet($m, key, value);
+    			} else {
+    				if (!$o) {
+    					/*
+    					 * Initialize the linked list as an empty node, so that we don't have
+    					 * to special-case handling of the first node: we can always refer to
+    					 * it as (previous node).next, instead of something like (list).head
+    					 */
+    					$o = { key: {}, next: null };
+    				}
+    				listSet($o, key, value);
+    			}
+    		}
+    	};
+    	return channel;
+    };
+
+    var hasOwn$1 = Object.prototype.hasOwnProperty;
+    var toString$1 = Object.prototype.toString;
+
+    var foreach = function forEach (obj, fn, ctx) {
+        if (toString$1.call(fn) !== '[object Function]') {
+            throw new TypeError('iterator must be a function');
+        }
+        var l = obj.length;
+        if (l === +l) {
+            for (var i = 0; i < l; i++) {
+                fn.call(ctx, obj[i], i, obj);
+            }
+        } else {
+            for (var k in obj) {
+                if (hasOwn$1.call(obj, k)) {
+                    fn.call(ctx, obj[k], k, obj);
+                }
+            }
+        }
+    };
+
+    /**
+     * Array#filter.
+     *
+     * @param {Array} arr
+     * @param {Function} fn
+     * @param {Object=} self
+     * @return {Array}
+     * @throw TypeError
+     */
+
+    var arrayFilter = function (arr, fn, self) {
+      if (arr.filter) return arr.filter(fn, self);
+      if (void 0 === arr || null === arr) throw new TypeError;
+      if ('function' != typeof fn) throw new TypeError;
+      var ret = [];
+      for (var i = 0; i < arr.length; i++) {
+        if (!hasOwn$2.call(arr, i)) continue;
+        var val = arr[i];
+        if (fn.call(self, val, i, arr)) ret.push(val);
+      }
+      return ret;
+    };
+
+    var hasOwn$2 = Object.prototype.hasOwnProperty;
+
+    var availableTypedArrays = function availableTypedArrays() {
+    	return arrayFilter([
+    		'BigInt64Array',
+    		'BigUint64Array',
+    		'Float32Array',
+    		'Float64Array',
+    		'Int16Array',
+    		'Int32Array',
+    		'Int8Array',
+    		'Uint16Array',
+    		'Uint32Array',
+    		'Uint8Array',
+    		'Uint8ClampedArray'
+    	], function (typedArray) {
+    		return typeof commonjsGlobal[typedArray] === 'function';
+    	});
+    };
+
+    /* globals
+    	AggregateError,
+    	Atomics,
+    	FinalizationRegistry,
+    	SharedArrayBuffer,
+    	WeakRef,
+    */
+
+    var undefined$3;
+
+    var $SyntaxError$1 = SyntaxError;
+    var $Function$1 = Function;
+    var $TypeError$5 = TypeError;
+
+    // eslint-disable-next-line consistent-return
+    var getEvalledConstructor$1 = function (expressionSyntax) {
+    	try {
+    		// eslint-disable-next-line no-new-func
+    		return Function('"use strict"; return (' + expressionSyntax + ').constructor;')();
+    	} catch (e) {}
+    };
+
+    var $gOPD$3 = Object.getOwnPropertyDescriptor;
+    if ($gOPD$3) {
+    	try {
+    		$gOPD$3({}, '');
+    	} catch (e) {
+    		$gOPD$3 = null; // this is IE 8, which has a broken gOPD
+    	}
+    }
+
+    var throwTypeError$2 = function () { throw new $TypeError$5(); };
+    var ThrowTypeError$2 = $gOPD$3
+    	? (function () {
+    		try {
+    			// eslint-disable-next-line no-unused-expressions, no-caller, no-restricted-properties
+    			arguments.callee; // IE 8 does not throw here
+    			return throwTypeError$2;
+    		} catch (calleeThrows) {
+    			try {
+    				// IE 8 throws on Object.getOwnPropertyDescriptor(arguments, '')
+    				return $gOPD$3(arguments, 'callee').get;
+    			} catch (gOPDthrows) {
+    				return throwTypeError$2;
+    			}
+    		}
+    	}())
+    	: throwTypeError$2;
+
+    var hasSymbols$5 = hasSymbols();
+
+    var getProto$3 = Object.getPrototypeOf || function (x) { return x.__proto__; }; // eslint-disable-line no-proto
+
+    var asyncGenFunction$2 = getEvalledConstructor$1('async function* () {}');
+    var asyncGenFunctionPrototype$1 = asyncGenFunction$2 ? asyncGenFunction$2.prototype : undefined$3;
+    var asyncGenPrototype$1 = asyncGenFunctionPrototype$1 ? asyncGenFunctionPrototype$1.prototype : undefined$3;
+
+    var TypedArray$2 = typeof Uint8Array === 'undefined' ? undefined$3 : getProto$3(Uint8Array);
+
+    var INTRINSICS$2 = {
+    	'%AggregateError%': typeof AggregateError === 'undefined' ? undefined$3 : AggregateError,
+    	'%Array%': Array,
+    	'%ArrayBuffer%': typeof ArrayBuffer === 'undefined' ? undefined$3 : ArrayBuffer,
+    	'%ArrayIteratorPrototype%': hasSymbols$5 ? getProto$3([][Symbol.iterator]()) : undefined$3,
+    	'%AsyncFromSyncIteratorPrototype%': undefined$3,
+    	'%AsyncFunction%': getEvalledConstructor$1('async function () {}'),
+    	'%AsyncGenerator%': asyncGenFunctionPrototype$1,
+    	'%AsyncGeneratorFunction%': asyncGenFunction$2,
+    	'%AsyncIteratorPrototype%': asyncGenPrototype$1 ? getProto$3(asyncGenPrototype$1) : undefined$3,
+    	'%Atomics%': typeof Atomics === 'undefined' ? undefined$3 : Atomics,
+    	'%BigInt%': typeof BigInt === 'undefined' ? undefined$3 : BigInt,
+    	'%Boolean%': Boolean,
+    	'%DataView%': typeof DataView === 'undefined' ? undefined$3 : DataView,
+    	'%Date%': Date,
+    	'%decodeURI%': decodeURI,
+    	'%decodeURIComponent%': decodeURIComponent,
+    	'%encodeURI%': encodeURI,
+    	'%encodeURIComponent%': encodeURIComponent,
+    	'%Error%': Error,
+    	'%eval%': eval, // eslint-disable-line no-eval
+    	'%EvalError%': EvalError,
+    	'%Float32Array%': typeof Float32Array === 'undefined' ? undefined$3 : Float32Array,
+    	'%Float64Array%': typeof Float64Array === 'undefined' ? undefined$3 : Float64Array,
+    	'%FinalizationRegistry%': typeof FinalizationRegistry === 'undefined' ? undefined$3 : FinalizationRegistry,
+    	'%Function%': $Function$1,
+    	'%GeneratorFunction%': getEvalledConstructor$1('function* () {}'),
+    	'%Int8Array%': typeof Int8Array === 'undefined' ? undefined$3 : Int8Array,
+    	'%Int16Array%': typeof Int16Array === 'undefined' ? undefined$3 : Int16Array,
+    	'%Int32Array%': typeof Int32Array === 'undefined' ? undefined$3 : Int32Array,
+    	'%isFinite%': isFinite,
+    	'%isNaN%': isNaN,
+    	'%IteratorPrototype%': hasSymbols$5 ? getProto$3(getProto$3([][Symbol.iterator]())) : undefined$3,
+    	'%JSON%': typeof JSON === 'object' ? JSON : undefined$3,
+    	'%Map%': typeof Map === 'undefined' ? undefined$3 : Map,
+    	'%MapIteratorPrototype%': typeof Map === 'undefined' || !hasSymbols$5 ? undefined$3 : getProto$3(new Map()[Symbol.iterator]()),
+    	'%Math%': Math,
+    	'%Number%': Number,
+    	'%Object%': Object,
+    	'%parseFloat%': parseFloat,
+    	'%parseInt%': parseInt,
+    	'%Promise%': typeof Promise === 'undefined' ? undefined$3 : Promise,
+    	'%Proxy%': typeof Proxy === 'undefined' ? undefined$3 : Proxy,
+    	'%RangeError%': RangeError,
+    	'%ReferenceError%': ReferenceError,
+    	'%Reflect%': typeof Reflect === 'undefined' ? undefined$3 : Reflect,
+    	'%RegExp%': RegExp,
+    	'%Set%': typeof Set === 'undefined' ? undefined$3 : Set,
+    	'%SetIteratorPrototype%': typeof Set === 'undefined' || !hasSymbols$5 ? undefined$3 : getProto$3(new Set()[Symbol.iterator]()),
+    	'%SharedArrayBuffer%': typeof SharedArrayBuffer === 'undefined' ? undefined$3 : SharedArrayBuffer,
+    	'%String%': String,
+    	'%StringIteratorPrototype%': hasSymbols$5 ? getProto$3(''[Symbol.iterator]()) : undefined$3,
+    	'%Symbol%': hasSymbols$5 ? Symbol : undefined$3,
+    	'%SyntaxError%': $SyntaxError$1,
+    	'%ThrowTypeError%': ThrowTypeError$2,
+    	'%TypedArray%': TypedArray$2,
+    	'%TypeError%': $TypeError$5,
+    	'%Uint8Array%': typeof Uint8Array === 'undefined' ? undefined$3 : Uint8Array,
+    	'%Uint8ClampedArray%': typeof Uint8ClampedArray === 'undefined' ? undefined$3 : Uint8ClampedArray,
+    	'%Uint16Array%': typeof Uint16Array === 'undefined' ? undefined$3 : Uint16Array,
+    	'%Uint32Array%': typeof Uint32Array === 'undefined' ? undefined$3 : Uint32Array,
+    	'%URIError%': URIError,
+    	'%WeakMap%': typeof WeakMap === 'undefined' ? undefined$3 : WeakMap,
+    	'%WeakRef%': typeof WeakRef === 'undefined' ? undefined$3 : WeakRef,
+    	'%WeakSet%': typeof WeakSet === 'undefined' ? undefined$3 : WeakSet
+    };
+
+    var LEGACY_ALIASES$1 = {
+    	'%ArrayBufferPrototype%': ['ArrayBuffer', 'prototype'],
+    	'%ArrayPrototype%': ['Array', 'prototype'],
+    	'%ArrayProto_entries%': ['Array', 'prototype', 'entries'],
+    	'%ArrayProto_forEach%': ['Array', 'prototype', 'forEach'],
+    	'%ArrayProto_keys%': ['Array', 'prototype', 'keys'],
+    	'%ArrayProto_values%': ['Array', 'prototype', 'values'],
+    	'%AsyncFunctionPrototype%': ['AsyncFunction', 'prototype'],
+    	'%AsyncGenerator%': ['AsyncGeneratorFunction', 'prototype'],
+    	'%AsyncGeneratorPrototype%': ['AsyncGeneratorFunction', 'prototype', 'prototype'],
+    	'%BooleanPrototype%': ['Boolean', 'prototype'],
+    	'%DataViewPrototype%': ['DataView', 'prototype'],
+    	'%DatePrototype%': ['Date', 'prototype'],
+    	'%ErrorPrototype%': ['Error', 'prototype'],
+    	'%EvalErrorPrototype%': ['EvalError', 'prototype'],
+    	'%Float32ArrayPrototype%': ['Float32Array', 'prototype'],
+    	'%Float64ArrayPrototype%': ['Float64Array', 'prototype'],
+    	'%FunctionPrototype%': ['Function', 'prototype'],
+    	'%Generator%': ['GeneratorFunction', 'prototype'],
+    	'%GeneratorPrototype%': ['GeneratorFunction', 'prototype', 'prototype'],
+    	'%Int8ArrayPrototype%': ['Int8Array', 'prototype'],
+    	'%Int16ArrayPrototype%': ['Int16Array', 'prototype'],
+    	'%Int32ArrayPrototype%': ['Int32Array', 'prototype'],
+    	'%JSONParse%': ['JSON', 'parse'],
+    	'%JSONStringify%': ['JSON', 'stringify'],
+    	'%MapPrototype%': ['Map', 'prototype'],
+    	'%NumberPrototype%': ['Number', 'prototype'],
+    	'%ObjectPrototype%': ['Object', 'prototype'],
+    	'%ObjProto_toString%': ['Object', 'prototype', 'toString'],
+    	'%ObjProto_valueOf%': ['Object', 'prototype', 'valueOf'],
+    	'%PromisePrototype%': ['Promise', 'prototype'],
+    	'%PromiseProto_then%': ['Promise', 'prototype', 'then'],
+    	'%Promise_all%': ['Promise', 'all'],
+    	'%Promise_reject%': ['Promise', 'reject'],
+    	'%Promise_resolve%': ['Promise', 'resolve'],
+    	'%RangeErrorPrototype%': ['RangeError', 'prototype'],
+    	'%ReferenceErrorPrototype%': ['ReferenceError', 'prototype'],
+    	'%RegExpPrototype%': ['RegExp', 'prototype'],
+    	'%SetPrototype%': ['Set', 'prototype'],
+    	'%SharedArrayBufferPrototype%': ['SharedArrayBuffer', 'prototype'],
+    	'%StringPrototype%': ['String', 'prototype'],
+    	'%SymbolPrototype%': ['Symbol', 'prototype'],
+    	'%SyntaxErrorPrototype%': ['SyntaxError', 'prototype'],
+    	'%TypedArrayPrototype%': ['TypedArray', 'prototype'],
+    	'%TypeErrorPrototype%': ['TypeError', 'prototype'],
+    	'%Uint8ArrayPrototype%': ['Uint8Array', 'prototype'],
+    	'%Uint8ClampedArrayPrototype%': ['Uint8ClampedArray', 'prototype'],
+    	'%Uint16ArrayPrototype%': ['Uint16Array', 'prototype'],
+    	'%Uint32ArrayPrototype%': ['Uint32Array', 'prototype'],
+    	'%URIErrorPrototype%': ['URIError', 'prototype'],
+    	'%WeakMapPrototype%': ['WeakMap', 'prototype'],
+    	'%WeakSetPrototype%': ['WeakSet', 'prototype']
+    };
+
+
+
+    var $concat$1 = functionBind.call(Function.call, Array.prototype.concat);
+    var $spliceApply$1 = functionBind.call(Function.apply, Array.prototype.splice);
+    var $replace$2 = functionBind.call(Function.call, String.prototype.replace);
+
+    /* adapted from https://github.com/lodash/lodash/blob/4.17.15/dist/lodash.js#L6735-L6744 */
+    var rePropName$2 = /[^%.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|%$))/g;
+    var reEscapeChar$2 = /\\(\\)?/g; /** Used to match backslashes in property paths. */
+    var stringToPath$2 = function stringToPath(string) {
+    	var result = [];
+    	$replace$2(string, rePropName$2, function (match, number, quote, subString) {
+    		result[result.length] = quote ? $replace$2(subString, reEscapeChar$2, '$1') : number || match;
+    	});
+    	return result;
+    };
+    /* end adaptation */
+
+    var getBaseIntrinsic$2 = function getBaseIntrinsic(name, allowMissing) {
+    	var intrinsicName = name;
+    	var alias;
+    	if (src(LEGACY_ALIASES$1, intrinsicName)) {
+    		alias = LEGACY_ALIASES$1[intrinsicName];
+    		intrinsicName = '%' + alias[0] + '%';
+    	}
+
+    	if (src(INTRINSICS$2, intrinsicName)) {
+    		var value = INTRINSICS$2[intrinsicName];
+    		if (typeof value === 'undefined' && !allowMissing) {
+    			throw new $TypeError$5('intrinsic ' + name + ' exists, but is not available. Please file an issue!');
+    		}
+
+    		return {
+    			alias: alias,
+    			name: intrinsicName,
+    			value: value
+    		};
+    	}
+
+    	throw new $SyntaxError$1('intrinsic ' + name + ' does not exist!');
+    };
+
+    var GetIntrinsic$1 = function GetIntrinsic(name, allowMissing) {
+    	if (typeof name !== 'string' || name.length === 0) {
+    		throw new $TypeError$5('intrinsic name must be a non-empty string');
+    	}
+    	if (arguments.length > 1 && typeof allowMissing !== 'boolean') {
+    		throw new $TypeError$5('"allowMissing" argument must be a boolean');
+    	}
+
+    	var parts = stringToPath$2(name);
+    	var intrinsicBaseName = parts.length > 0 ? parts[0] : '';
+
+    	var intrinsic = getBaseIntrinsic$2('%' + intrinsicBaseName + '%', allowMissing);
+    	var intrinsicRealName = intrinsic.name;
+    	var value = intrinsic.value;
+    	var skipFurtherCaching = false;
+
+    	var alias = intrinsic.alias;
+    	if (alias) {
+    		intrinsicBaseName = alias[0];
+    		$spliceApply$1(parts, $concat$1([0, 1], alias));
+    	}
+
+    	for (var i = 1, isOwn = true; i < parts.length; i += 1) {
+    		var part = parts[i];
+    		if (part === 'constructor' || !isOwn) {
+    			skipFurtherCaching = true;
+    		}
+
+    		intrinsicBaseName += '.' + part;
+    		intrinsicRealName = '%' + intrinsicBaseName + '%';
+
+    		if (src(INTRINSICS$2, intrinsicRealName)) {
+    			value = INTRINSICS$2[intrinsicRealName];
+    		} else if (value != null) {
+    			if ($gOPD$3 && (i + 1) >= parts.length) {
+    				var desc = $gOPD$3(value, part);
+    				isOwn = !!desc;
+
+    				if (!allowMissing && !(part in value)) {
+    					throw new $TypeError$5('base intrinsic for ' + name + ' exists, but the property is not available.');
+    				}
+    				// By convention, when a data property is converted to an accessor
+    				// property to emulate a data property that does not suffer from
+    				// the override mistake, that accessor's getter is marked with
+    				// an `originalValue` property. Here, when we detect this, we
+    				// uphold the illusion by pretending to see that original data
+    				// property, i.e., returning the value rather than the getter
+    				// itself.
+    				if (isOwn && 'get' in desc && !('originalValue' in desc.get)) {
+    					value = desc.get;
+    				} else {
+    					value = value[part];
+    				}
+    			} else {
+    				isOwn = src(value, part);
+    				value = value[part];
+    			}
+
+    			if (isOwn && !skipFurtherCaching) {
+    				INTRINSICS$2[intrinsicRealName] = value;
+    			}
+    		}
+    	}
+    	return value;
+    };
+
+    var $gOPD$4 = GetIntrinsic$1('%Object.getOwnPropertyDescriptor%');
+    if ($gOPD$4) {
+    	try {
+    		$gOPD$4([], 'length');
+    	} catch (e) {
+    		// IE 8 has a broken gOPD
+    		$gOPD$4 = null;
+    	}
+    }
+
+    var getOwnPropertyDescriptor = $gOPD$4;
+
+    /* globals
+    	AggregateError,
+    	Atomics,
+    	FinalizationRegistry,
+    	SharedArrayBuffer,
+    	WeakRef,
+    */
+
+    var undefined$4;
+
+    var $SyntaxError$2 = SyntaxError;
+    var $Function$2 = Function;
+    var $TypeError$6 = TypeError;
+
+    // eslint-disable-next-line consistent-return
+    var getEvalledConstructor$2 = function (expressionSyntax) {
+    	try {
+    		// eslint-disable-next-line no-new-func
+    		return Function('"use strict"; return (' + expressionSyntax + ').constructor;')();
+    	} catch (e) {}
+    };
+
+    var $gOPD$5 = Object.getOwnPropertyDescriptor;
+    if ($gOPD$5) {
+    	try {
+    		$gOPD$5({}, '');
+    	} catch (e) {
+    		$gOPD$5 = null; // this is IE 8, which has a broken gOPD
+    	}
+    }
+
+    var throwTypeError$3 = function () { throw new $TypeError$6(); };
+    var ThrowTypeError$3 = $gOPD$5
+    	? (function () {
+    		try {
+    			// eslint-disable-next-line no-unused-expressions, no-caller, no-restricted-properties
+    			arguments.callee; // IE 8 does not throw here
+    			return throwTypeError$3;
+    		} catch (calleeThrows) {
+    			try {
+    				// IE 8 throws on Object.getOwnPropertyDescriptor(arguments, '')
+    				return $gOPD$5(arguments, 'callee').get;
+    			} catch (gOPDthrows) {
+    				return throwTypeError$3;
+    			}
+    		}
+    	}())
+    	: throwTypeError$3;
+
+    var hasSymbols$6 = hasSymbols();
+
+    var getProto$4 = Object.getPrototypeOf || function (x) { return x.__proto__; }; // eslint-disable-line no-proto
+
+    var asyncGenFunction$3 = getEvalledConstructor$2('async function* () {}');
+    var asyncGenFunctionPrototype$2 = asyncGenFunction$3 ? asyncGenFunction$3.prototype : undefined$4;
+    var asyncGenPrototype$2 = asyncGenFunctionPrototype$2 ? asyncGenFunctionPrototype$2.prototype : undefined$4;
+
+    var TypedArray$3 = typeof Uint8Array === 'undefined' ? undefined$4 : getProto$4(Uint8Array);
+
+    var INTRINSICS$3 = {
+    	'%AggregateError%': typeof AggregateError === 'undefined' ? undefined$4 : AggregateError,
+    	'%Array%': Array,
+    	'%ArrayBuffer%': typeof ArrayBuffer === 'undefined' ? undefined$4 : ArrayBuffer,
+    	'%ArrayIteratorPrototype%': hasSymbols$6 ? getProto$4([][Symbol.iterator]()) : undefined$4,
+    	'%AsyncFromSyncIteratorPrototype%': undefined$4,
+    	'%AsyncFunction%': getEvalledConstructor$2('async function () {}'),
+    	'%AsyncGenerator%': asyncGenFunctionPrototype$2,
+    	'%AsyncGeneratorFunction%': asyncGenFunction$3,
+    	'%AsyncIteratorPrototype%': asyncGenPrototype$2 ? getProto$4(asyncGenPrototype$2) : undefined$4,
+    	'%Atomics%': typeof Atomics === 'undefined' ? undefined$4 : Atomics,
+    	'%BigInt%': typeof BigInt === 'undefined' ? undefined$4 : BigInt,
+    	'%Boolean%': Boolean,
+    	'%DataView%': typeof DataView === 'undefined' ? undefined$4 : DataView,
+    	'%Date%': Date,
+    	'%decodeURI%': decodeURI,
+    	'%decodeURIComponent%': decodeURIComponent,
+    	'%encodeURI%': encodeURI,
+    	'%encodeURIComponent%': encodeURIComponent,
+    	'%Error%': Error,
+    	'%eval%': eval, // eslint-disable-line no-eval
+    	'%EvalError%': EvalError,
+    	'%Float32Array%': typeof Float32Array === 'undefined' ? undefined$4 : Float32Array,
+    	'%Float64Array%': typeof Float64Array === 'undefined' ? undefined$4 : Float64Array,
+    	'%FinalizationRegistry%': typeof FinalizationRegistry === 'undefined' ? undefined$4 : FinalizationRegistry,
+    	'%Function%': $Function$2,
+    	'%GeneratorFunction%': getEvalledConstructor$2('function* () {}'),
+    	'%Int8Array%': typeof Int8Array === 'undefined' ? undefined$4 : Int8Array,
+    	'%Int16Array%': typeof Int16Array === 'undefined' ? undefined$4 : Int16Array,
+    	'%Int32Array%': typeof Int32Array === 'undefined' ? undefined$4 : Int32Array,
+    	'%isFinite%': isFinite,
+    	'%isNaN%': isNaN,
+    	'%IteratorPrototype%': hasSymbols$6 ? getProto$4(getProto$4([][Symbol.iterator]())) : undefined$4,
+    	'%JSON%': typeof JSON === 'object' ? JSON : undefined$4,
+    	'%Map%': typeof Map === 'undefined' ? undefined$4 : Map,
+    	'%MapIteratorPrototype%': typeof Map === 'undefined' || !hasSymbols$6 ? undefined$4 : getProto$4(new Map()[Symbol.iterator]()),
+    	'%Math%': Math,
+    	'%Number%': Number,
+    	'%Object%': Object,
+    	'%parseFloat%': parseFloat,
+    	'%parseInt%': parseInt,
+    	'%Promise%': typeof Promise === 'undefined' ? undefined$4 : Promise,
+    	'%Proxy%': typeof Proxy === 'undefined' ? undefined$4 : Proxy,
+    	'%RangeError%': RangeError,
+    	'%ReferenceError%': ReferenceError,
+    	'%Reflect%': typeof Reflect === 'undefined' ? undefined$4 : Reflect,
+    	'%RegExp%': RegExp,
+    	'%Set%': typeof Set === 'undefined' ? undefined$4 : Set,
+    	'%SetIteratorPrototype%': typeof Set === 'undefined' || !hasSymbols$6 ? undefined$4 : getProto$4(new Set()[Symbol.iterator]()),
+    	'%SharedArrayBuffer%': typeof SharedArrayBuffer === 'undefined' ? undefined$4 : SharedArrayBuffer,
+    	'%String%': String,
+    	'%StringIteratorPrototype%': hasSymbols$6 ? getProto$4(''[Symbol.iterator]()) : undefined$4,
+    	'%Symbol%': hasSymbols$6 ? Symbol : undefined$4,
+    	'%SyntaxError%': $SyntaxError$2,
+    	'%ThrowTypeError%': ThrowTypeError$3,
+    	'%TypedArray%': TypedArray$3,
+    	'%TypeError%': $TypeError$6,
+    	'%Uint8Array%': typeof Uint8Array === 'undefined' ? undefined$4 : Uint8Array,
+    	'%Uint8ClampedArray%': typeof Uint8ClampedArray === 'undefined' ? undefined$4 : Uint8ClampedArray,
+    	'%Uint16Array%': typeof Uint16Array === 'undefined' ? undefined$4 : Uint16Array,
+    	'%Uint32Array%': typeof Uint32Array === 'undefined' ? undefined$4 : Uint32Array,
+    	'%URIError%': URIError,
+    	'%WeakMap%': typeof WeakMap === 'undefined' ? undefined$4 : WeakMap,
+    	'%WeakRef%': typeof WeakRef === 'undefined' ? undefined$4 : WeakRef,
+    	'%WeakSet%': typeof WeakSet === 'undefined' ? undefined$4 : WeakSet
+    };
+
+    var LEGACY_ALIASES$2 = {
+    	'%ArrayBufferPrototype%': ['ArrayBuffer', 'prototype'],
+    	'%ArrayPrototype%': ['Array', 'prototype'],
+    	'%ArrayProto_entries%': ['Array', 'prototype', 'entries'],
+    	'%ArrayProto_forEach%': ['Array', 'prototype', 'forEach'],
+    	'%ArrayProto_keys%': ['Array', 'prototype', 'keys'],
+    	'%ArrayProto_values%': ['Array', 'prototype', 'values'],
+    	'%AsyncFunctionPrototype%': ['AsyncFunction', 'prototype'],
+    	'%AsyncGenerator%': ['AsyncGeneratorFunction', 'prototype'],
+    	'%AsyncGeneratorPrototype%': ['AsyncGeneratorFunction', 'prototype', 'prototype'],
+    	'%BooleanPrototype%': ['Boolean', 'prototype'],
+    	'%DataViewPrototype%': ['DataView', 'prototype'],
+    	'%DatePrototype%': ['Date', 'prototype'],
+    	'%ErrorPrototype%': ['Error', 'prototype'],
+    	'%EvalErrorPrototype%': ['EvalError', 'prototype'],
+    	'%Float32ArrayPrototype%': ['Float32Array', 'prototype'],
+    	'%Float64ArrayPrototype%': ['Float64Array', 'prototype'],
+    	'%FunctionPrototype%': ['Function', 'prototype'],
+    	'%Generator%': ['GeneratorFunction', 'prototype'],
+    	'%GeneratorPrototype%': ['GeneratorFunction', 'prototype', 'prototype'],
+    	'%Int8ArrayPrototype%': ['Int8Array', 'prototype'],
+    	'%Int16ArrayPrototype%': ['Int16Array', 'prototype'],
+    	'%Int32ArrayPrototype%': ['Int32Array', 'prototype'],
+    	'%JSONParse%': ['JSON', 'parse'],
+    	'%JSONStringify%': ['JSON', 'stringify'],
+    	'%MapPrototype%': ['Map', 'prototype'],
+    	'%NumberPrototype%': ['Number', 'prototype'],
+    	'%ObjectPrototype%': ['Object', 'prototype'],
+    	'%ObjProto_toString%': ['Object', 'prototype', 'toString'],
+    	'%ObjProto_valueOf%': ['Object', 'prototype', 'valueOf'],
+    	'%PromisePrototype%': ['Promise', 'prototype'],
+    	'%PromiseProto_then%': ['Promise', 'prototype', 'then'],
+    	'%Promise_all%': ['Promise', 'all'],
+    	'%Promise_reject%': ['Promise', 'reject'],
+    	'%Promise_resolve%': ['Promise', 'resolve'],
+    	'%RangeErrorPrototype%': ['RangeError', 'prototype'],
+    	'%ReferenceErrorPrototype%': ['ReferenceError', 'prototype'],
+    	'%RegExpPrototype%': ['RegExp', 'prototype'],
+    	'%SetPrototype%': ['Set', 'prototype'],
+    	'%SharedArrayBufferPrototype%': ['SharedArrayBuffer', 'prototype'],
+    	'%StringPrototype%': ['String', 'prototype'],
+    	'%SymbolPrototype%': ['Symbol', 'prototype'],
+    	'%SyntaxErrorPrototype%': ['SyntaxError', 'prototype'],
+    	'%TypedArrayPrototype%': ['TypedArray', 'prototype'],
+    	'%TypeErrorPrototype%': ['TypeError', 'prototype'],
+    	'%Uint8ArrayPrototype%': ['Uint8Array', 'prototype'],
+    	'%Uint8ClampedArrayPrototype%': ['Uint8ClampedArray', 'prototype'],
+    	'%Uint16ArrayPrototype%': ['Uint16Array', 'prototype'],
+    	'%Uint32ArrayPrototype%': ['Uint32Array', 'prototype'],
+    	'%URIErrorPrototype%': ['URIError', 'prototype'],
+    	'%WeakMapPrototype%': ['WeakMap', 'prototype'],
+    	'%WeakSetPrototype%': ['WeakSet', 'prototype']
+    };
+
+
+
+    var $concat$2 = functionBind.call(Function.call, Array.prototype.concat);
+    var $spliceApply$2 = functionBind.call(Function.apply, Array.prototype.splice);
+    var $replace$3 = functionBind.call(Function.call, String.prototype.replace);
+
+    /* adapted from https://github.com/lodash/lodash/blob/4.17.15/dist/lodash.js#L6735-L6744 */
+    var rePropName$3 = /[^%.[\]]+|\[(?:(-?\d+(?:\.\d+)?)|(["'])((?:(?!\2)[^\\]|\\.)*?)\2)\]|(?=(?:\.|\[\])(?:\.|\[\]|%$))/g;
+    var reEscapeChar$3 = /\\(\\)?/g; /** Used to match backslashes in property paths. */
+    var stringToPath$3 = function stringToPath(string) {
+    	var result = [];
+    	$replace$3(string, rePropName$3, function (match, number, quote, subString) {
+    		result[result.length] = quote ? $replace$3(subString, reEscapeChar$3, '$1') : number || match;
+    	});
+    	return result;
+    };
+    /* end adaptation */
+
+    var getBaseIntrinsic$3 = function getBaseIntrinsic(name, allowMissing) {
+    	var intrinsicName = name;
+    	var alias;
+    	if (src(LEGACY_ALIASES$2, intrinsicName)) {
+    		alias = LEGACY_ALIASES$2[intrinsicName];
+    		intrinsicName = '%' + alias[0] + '%';
+    	}
+
+    	if (src(INTRINSICS$3, intrinsicName)) {
+    		var value = INTRINSICS$3[intrinsicName];
+    		if (typeof value === 'undefined' && !allowMissing) {
+    			throw new $TypeError$6('intrinsic ' + name + ' exists, but is not available. Please file an issue!');
+    		}
+
+    		return {
+    			alias: alias,
+    			name: intrinsicName,
+    			value: value
+    		};
+    	}
+
+    	throw new $SyntaxError$2('intrinsic ' + name + ' does not exist!');
+    };
+
+    var GetIntrinsic$2 = function GetIntrinsic(name, allowMissing) {
+    	if (typeof name !== 'string' || name.length === 0) {
+    		throw new $TypeError$6('intrinsic name must be a non-empty string');
+    	}
+    	if (arguments.length > 1 && typeof allowMissing !== 'boolean') {
+    		throw new $TypeError$6('"allowMissing" argument must be a boolean');
+    	}
+
+    	var parts = stringToPath$3(name);
+    	var intrinsicBaseName = parts.length > 0 ? parts[0] : '';
+
+    	var intrinsic = getBaseIntrinsic$3('%' + intrinsicBaseName + '%', allowMissing);
+    	var intrinsicRealName = intrinsic.name;
+    	var value = intrinsic.value;
+    	var skipFurtherCaching = false;
+
+    	var alias = intrinsic.alias;
+    	if (alias) {
+    		intrinsicBaseName = alias[0];
+    		$spliceApply$2(parts, $concat$2([0, 1], alias));
+    	}
+
+    	for (var i = 1, isOwn = true; i < parts.length; i += 1) {
+    		var part = parts[i];
+    		if (part === 'constructor' || !isOwn) {
+    			skipFurtherCaching = true;
+    		}
+
+    		intrinsicBaseName += '.' + part;
+    		intrinsicRealName = '%' + intrinsicBaseName + '%';
+
+    		if (src(INTRINSICS$3, intrinsicRealName)) {
+    			value = INTRINSICS$3[intrinsicRealName];
+    		} else if (value != null) {
+    			if ($gOPD$5 && (i + 1) >= parts.length) {
+    				var desc = $gOPD$5(value, part);
+    				isOwn = !!desc;
+
+    				if (!allowMissing && !(part in value)) {
+    					throw new $TypeError$6('base intrinsic for ' + name + ' exists, but the property is not available.');
+    				}
+    				// By convention, when a data property is converted to an accessor
+    				// property to emulate a data property that does not suffer from
+    				// the override mistake, that accessor's getter is marked with
+    				// an `originalValue` property. Here, when we detect this, we
+    				// uphold the illusion by pretending to see that original data
+    				// property, i.e., returning the value rather than the getter
+    				// itself.
+    				if (isOwn && 'get' in desc && !('originalValue' in desc.get)) {
+    					value = desc.get;
+    				} else {
+    					value = value[part];
+    				}
+    			} else {
+    				isOwn = src(value, part);
+    				value = value[part];
+    			}
+
+    			if (isOwn && !skipFurtherCaching) {
+    				INTRINSICS$3[intrinsicRealName] = value;
+    			}
+    		}
+    	}
+    	return value;
+    };
+
+    var $gOPD$6 = GetIntrinsic$2('%Object.getOwnPropertyDescriptor%');
+    if ($gOPD$6) {
+    	try {
+    		$gOPD$6([], 'length');
+    	} catch (e) {
+    		// IE 8 has a broken gOPD
+    		$gOPD$6 = null;
+    	}
+    }
+
+    var getOwnPropertyDescriptor$1 = $gOPD$6;
+
+    var $toString$2 = callBound('Object.prototype.toString');
+    var hasSymbols$7 = hasSymbols();
+    var hasToStringTag$6 = hasSymbols$7 && typeof Symbol.toStringTag === 'symbol';
+
+    var typedArrays = availableTypedArrays();
+
+    var $indexOf$1 = callBound('Array.prototype.indexOf', true) || function indexOf(array, value) {
+    	for (var i = 0; i < array.length; i += 1) {
+    		if (array[i] === value) {
+    			return i;
+    		}
+    	}
+    	return -1;
+    };
+    var $slice = callBound('String.prototype.slice');
+    var toStrTags = {};
+
+    var getPrototypeOf = Object.getPrototypeOf; // require('getprototypeof');
+    if (hasToStringTag$6 && getOwnPropertyDescriptor$1 && getPrototypeOf) {
+    	foreach(typedArrays, function (typedArray) {
+    		var arr = new commonjsGlobal[typedArray]();
+    		if (!(Symbol.toStringTag in arr)) {
+    			throw new EvalError('this engine has support for Symbol.toStringTag, but ' + typedArray + ' does not have the property! Please report this.');
+    		}
+    		var proto = getPrototypeOf(arr);
+    		var descriptor = getOwnPropertyDescriptor$1(proto, Symbol.toStringTag);
+    		if (!descriptor) {
+    			var superProto = getPrototypeOf(proto);
+    			descriptor = getOwnPropertyDescriptor$1(superProto, Symbol.toStringTag);
+    		}
+    		toStrTags[typedArray] = descriptor.get;
+    	});
+    }
+
+    var tryTypedArrays = function tryAllTypedArrays(value) {
+    	var anyTrue = false;
+    	foreach(toStrTags, function (getter, typedArray) {
+    		if (!anyTrue) {
+    			try {
+    				anyTrue = getter.call(value) === typedArray;
+    			} catch (e) { /**/ }
+    		}
+    	});
+    	return anyTrue;
+    };
+
+    var isTypedArray = function isTypedArray(value) {
+    	if (!value || typeof value !== 'object') { return false; }
+    	if (!hasToStringTag$6) {
+    		var tag = $slice($toString$2(value), 8, -1);
+    		return $indexOf$1(typedArrays, tag) > -1;
+    	}
+    	if (!getOwnPropertyDescriptor$1) { return false; }
+    	return tryTypedArrays(value);
+    };
+
+    var $toString$3 = callBound('Object.prototype.toString');
+    var hasSymbols$8 = hasSymbols();
+    var hasToStringTag$7 = hasSymbols$8 && typeof Symbol.toStringTag === 'symbol';
+
+    var typedArrays$1 = availableTypedArrays();
+
+    var $slice$1 = callBound('String.prototype.slice');
+    var toStrTags$1 = {};
+
+    var getPrototypeOf$1 = Object.getPrototypeOf; // require('getprototypeof');
+    if (hasToStringTag$7 && getOwnPropertyDescriptor && getPrototypeOf$1) {
+    	foreach(typedArrays$1, function (typedArray) {
+    		if (typeof commonjsGlobal[typedArray] === 'function') {
+    			var arr = new commonjsGlobal[typedArray]();
+    			if (!(Symbol.toStringTag in arr)) {
+    				throw new EvalError('this engine has support for Symbol.toStringTag, but ' + typedArray + ' does not have the property! Please report this.');
+    			}
+    			var proto = getPrototypeOf$1(arr);
+    			var descriptor = getOwnPropertyDescriptor(proto, Symbol.toStringTag);
+    			if (!descriptor) {
+    				var superProto = getPrototypeOf$1(proto);
+    				descriptor = getOwnPropertyDescriptor(superProto, Symbol.toStringTag);
+    			}
+    			toStrTags$1[typedArray] = descriptor.get;
+    		}
+    	});
+    }
+
+    var tryTypedArrays$1 = function tryAllTypedArrays(value) {
+    	var foundName = false;
+    	foreach(toStrTags$1, function (getter, typedArray) {
+    		if (!foundName) {
+    			try {
+    				var name = getter.call(value);
+    				if (name === typedArray) {
+    					foundName = name;
+    				}
+    			} catch (e) {}
+    		}
+    	});
+    	return foundName;
+    };
+
+
+
+    var whichTypedArray = function whichTypedArray(value) {
+    	if (!isTypedArray(value)) { return false; }
+    	if (!hasToStringTag$7) { return $slice$1($toString$3(value), 8, -1); }
+    	return tryTypedArrays$1(value);
+    };
+
+    // modified from https://github.com/es-shims/es6-shim
+
+    var canBeObject = function (obj) {
+    	return typeof obj !== 'undefined' && obj !== null;
+    };
+    var hasSymbols$9 = shams();
+
+    var toObject = Object;
+    var $push = callBound('Array.prototype.push');
+    var $propIsEnumerable = callBound('Object.prototype.propertyIsEnumerable');
+    var originalGetSymbols = hasSymbols$9 ? Object.getOwnPropertySymbols : null;
+
+    // eslint-disable-next-line no-unused-vars
+    var implementation$4 = function assign(target, source1) {
+    	if (!canBeObject(target)) { throw new TypeError('target must be an object'); }
+    	var objTarget = toObject(target);
+    	var s, source, i, props, syms, value, key;
+    	for (s = 1; s < arguments.length; ++s) {
+    		source = toObject(arguments[s]);
+    		props = objectKeys(source);
+    		var getSymbols = hasSymbols$9 && (Object.getOwnPropertySymbols || originalGetSymbols);
+    		if (getSymbols) {
+    			syms = getSymbols(source);
+    			for (i = 0; i < syms.length; ++i) {
+    				key = syms[i];
+    				if ($propIsEnumerable(source, key)) {
+    					$push(props, key);
+    				}
+    			}
+    		}
+    		for (i = 0; i < props.length; ++i) {
+    			key = props[i];
+    			value = source[key];
+    			if ($propIsEnumerable(source, key)) {
+    				objTarget[key] = value;
+    			}
+    		}
+    	}
+    	return objTarget;
+    };
+
+    var lacksProperEnumerationOrder = function () {
+    	if (!Object.assign) {
+    		return false;
+    	}
+    	/*
+    	 * v8, specifically in node 4.x, has a bug with incorrect property enumeration order
+    	 * note: this does not detect the bug unless there's 20 characters
+    	 */
+    	var str = 'abcdefghijklmnopqrst';
+    	var letters = str.split('');
+    	var map = {};
+    	for (var i = 0; i < letters.length; ++i) {
+    		map[letters[i]] = letters[i];
+    	}
+    	var obj = Object.assign({}, map);
+    	var actual = '';
+    	for (var k in obj) {
+    		actual += k;
+    	}
+    	return str !== actual;
+    };
+
+    var assignHasPendingExceptions = function () {
+    	if (!Object.assign || !Object.preventExtensions) {
+    		return false;
+    	}
+    	/*
+    	 * Firefox 37 still has "pending exception" logic in its Object.assign implementation,
+    	 * which is 72% slower than our shim, and Firefox 40's native implementation.
+    	 */
+    	var thrower = Object.preventExtensions({ 1: 2 });
+    	try {
+    		Object.assign(thrower, 'xy');
+    	} catch (e) {
+    		return thrower[1] === 'y';
+    	}
+    	return false;
+    };
+
+    var polyfill$3 = function getPolyfill() {
+    	if (!Object.assign) {
+    		return implementation$4;
+    	}
+    	if (lacksProperEnumerationOrder()) {
+    		return implementation$4;
+    	}
+    	if (assignHasPendingExceptions()) {
+    		return implementation$4;
+    	}
+    	return Object.assign;
+    };
+
+    var shim$2 = function shimAssign() {
+    	var polyfill = polyfill$3();
+    	defineProperties_1(
+    		Object,
+    		{ assign: polyfill },
+    		{ assign: function () { return Object.assign !== polyfill; } }
+    	);
+    	return polyfill;
+    };
+
+    var polyfill$4 = callBind.apply(polyfill$3());
+    // eslint-disable-next-line no-unused-vars
+    var bound = function assign(target, source1) {
+    	return polyfill$4(Object, arguments);
+    };
+
+    defineProperties_1(bound, {
+    	getPolyfill: polyfill$3,
+    	implementation: implementation$4,
+    	shim: shim$2
+    });
+
+    var object_assign = bound;
+
+    var $getTime = callBound('Date.prototype.getTime');
+    var gPO = Object.getPrototypeOf;
+    var $objToString = callBound('Object.prototype.toString');
+
+    var $Set$2 = getIntrinsic('%Set%', true);
+    var $mapHas$4 = callBound('Map.prototype.has', true);
+    var $mapGet$1 = callBound('Map.prototype.get', true);
+    var $mapSize = callBound('Map.prototype.size', true);
+    var $setAdd = callBound('Set.prototype.add', true);
+    var $setDelete = callBound('Set.prototype.delete', true);
+    var $setHas$3 = callBound('Set.prototype.has', true);
+    var $setSize = callBound('Set.prototype.size', true);
+
+    // taken from https://github.com/browserify/commonjs-assert/blob/bba838e9ba9e28edf3127ce6974624208502f6bc/internal/util/comparisons.js#L401-L414
+    function setHasEqualElement(set, val1, opts, channel) {
+      var i = esGetIterator(set);
+      var result;
+      while ((result = i.next()) && !result.done) {
+        if (internalDeepEqual(val1, result.value, opts, channel)) { // eslint-disable-line no-use-before-define
+          // Remove the matching element to make sure we do not check that again.
+          $setDelete(set, result.value);
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    // taken from https://github.com/browserify/commonjs-assert/blob/bba838e9ba9e28edf3127ce6974624208502f6bc/internal/util/comparisons.js#L416-L439
+    function findLooseMatchingPrimitives(prim) {
+      if (typeof prim === 'undefined') {
+        return null;
+      }
+      if (typeof prim === 'object') { // Only pass in null as object!
+        return void 0;
+      }
+      if (typeof prim === 'symbol') {
+        return false;
+      }
+      if (typeof prim === 'string' || typeof prim === 'number') {
+        // Loose equal entries exist only if the string is possible to convert to a regular number and not NaN.
+        return +prim === +prim; // eslint-disable-line no-implicit-coercion
+      }
+      return true;
+    }
+
+    // taken from https://github.com/browserify/commonjs-assert/blob/bba838e9ba9e28edf3127ce6974624208502f6bc/internal/util/comparisons.js#L449-L460
+    function mapMightHaveLoosePrim(a, b, prim, item, opts, channel) {
+      var altValue = findLooseMatchingPrimitives(prim);
+      if (altValue != null) {
+        return altValue;
+      }
+      var curB = $mapGet$1(b, altValue);
+      var looseOpts = object_assign({}, opts, { strict: false });
+      if (
+        (typeof curB === 'undefined' && !$mapHas$4(b, altValue))
+        // eslint-disable-next-line no-use-before-define
+        || !internalDeepEqual(item, curB, looseOpts, channel)
+      ) {
+        return false;
+      }
+      // eslint-disable-next-line no-use-before-define
+      return !$mapHas$4(a, altValue) && internalDeepEqual(item, curB, looseOpts, channel);
+    }
+
+    // taken from https://github.com/browserify/commonjs-assert/blob/bba838e9ba9e28edf3127ce6974624208502f6bc/internal/util/comparisons.js#L441-L447
+    function setMightHaveLoosePrim(a, b, prim) {
+      var altValue = findLooseMatchingPrimitives(prim);
+      if (altValue != null) {
+        return altValue;
+      }
+
+      return $setHas$3(b, altValue) && !$setHas$3(a, altValue);
+    }
+
+    // taken from https://github.com/browserify/commonjs-assert/blob/bba838e9ba9e28edf3127ce6974624208502f6bc/internal/util/comparisons.js#L518-L533
+    function mapHasEqualEntry(set, map, key1, item1, opts, channel) {
+      var i = esGetIterator(set);
+      var result;
+      var key2;
+      while ((result = i.next()) && !result.done) {
+        key2 = result.value;
+        if (
+          // eslint-disable-next-line no-use-before-define
+          internalDeepEqual(key1, key2, opts, channel)
+          // eslint-disable-next-line no-use-before-define
+          && internalDeepEqual(item1, $mapGet$1(map, key2), opts, channel)
+        ) {
+          $setDelete(set, key2);
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    function internalDeepEqual(actual, expected, options, channel) {
+      var opts = options || {};
+
+      // 7.1. All identical values are equivalent, as determined by ===.
+      if (opts.strict ? objectIs(actual, expected) : actual === expected) {
+        return true;
+      }
+
+      var actualBoxed = whichBoxedPrimitive(actual);
+      var expectedBoxed = whichBoxedPrimitive(expected);
+      if (actualBoxed !== expectedBoxed) {
+        return false;
+      }
+
+      // 7.3. Other pairs that do not both pass typeof value == 'object', equivalence is determined by ==.
+      if (!actual || !expected || (typeof actual !== 'object' && typeof expected !== 'object')) {
+        return opts.strict ? objectIs(actual, expected) : actual == expected; // eslint-disable-line eqeqeq
+      }
+
+      /*
+       * 7.4. For all other Object pairs, including Array objects, equivalence is
+       * determined by having the same number of owned properties (as verified
+       * with Object.prototype.hasOwnProperty.call), the same set of keys
+       * (although not necessarily the same order), equivalent values for every
+       * corresponding key, and an identical 'prototype' property. Note: this
+       * accounts for both named and indexed properties on Arrays.
+       */
+      // see https://github.com/nodejs/node/commit/d3aafd02efd3a403d646a3044adcf14e63a88d32 for memos/channel inspiration
+
+      var hasActual = channel.has(actual);
+      var hasExpected = channel.has(expected);
+      var sentinel;
+      if (hasActual && hasExpected) {
+        if (channel.get(actual) === channel.get(expected)) {
+          return true;
+        }
+      } else {
+        sentinel = {};
+      }
+      if (!hasActual) { channel.set(actual, sentinel); }
+      if (!hasExpected) { channel.set(expected, sentinel); }
+
+      // eslint-disable-next-line no-use-before-define
+      return objEquiv(actual, expected, opts, channel);
+    }
+
+    function isBuffer(x) {
+      if (!x || typeof x !== 'object' || typeof x.length !== 'number') {
+        return false;
+      }
+      if (typeof x.copy !== 'function' || typeof x.slice !== 'function') {
+        return false;
+      }
+      if (x.length > 0 && typeof x[0] !== 'number') {
+        return false;
+      }
+
+      return !!(x.constructor && x.constructor.isBuffer && x.constructor.isBuffer(x));
+    }
+
+    function setEquiv(a, b, opts, channel) {
+      if ($setSize(a) !== $setSize(b)) {
+        return false;
+      }
+      var iA = esGetIterator(a);
+      var iB = esGetIterator(b);
+      var resultA;
+      var resultB;
+      var set;
+      while ((resultA = iA.next()) && !resultA.done) {
+        if (resultA.value && typeof resultA.value === 'object') {
+          if (!set) { set = new $Set$2(); }
+          $setAdd(set, resultA.value);
+        } else if (!$setHas$3(b, resultA.value)) {
+          if (opts.strict) { return false; }
+          if (!setMightHaveLoosePrim(a, b, resultA.value)) {
+            return false;
+          }
+          if (!set) { set = new $Set$2(); }
+          $setAdd(set, resultA.value);
+        }
+      }
+      if (set) {
+        while ((resultB = iB.next()) && !resultB.done) {
+          // We have to check if a primitive value is already matching and only if it's not, go hunting for it.
+          if (resultB.value && typeof resultB.value === 'object') {
+            if (!setHasEqualElement(set, resultB.value, opts.strict, channel)) {
+              return false;
+            }
+          } else if (
+            !opts.strict
+            && !$setHas$3(a, resultB.value)
+            && !setHasEqualElement(set, resultB.value, opts.strict, channel)
+          ) {
+            return false;
+          }
+        }
+        return $setSize(set) === 0;
+      }
+      return true;
+    }
+
+    function mapEquiv(a, b, opts, channel) {
+      if ($mapSize(a) !== $mapSize(b)) {
+        return false;
+      }
+      var iA = esGetIterator(a);
+      var iB = esGetIterator(b);
+      var resultA;
+      var resultB;
+      var set;
+      var key;
+      var item1;
+      var item2;
+      while ((resultA = iA.next()) && !resultA.done) {
+        key = resultA.value[0];
+        item1 = resultA.value[1];
+        if (key && typeof key === 'object') {
+          if (!set) { set = new $Set$2(); }
+          $setAdd(set, key);
+        } else {
+          item2 = $mapGet$1(b, key);
+          if ((typeof item2 === 'undefined' && !$mapHas$4(b, key)) || !internalDeepEqual(item1, item2, opts, channel)) {
+            if (opts.strict) {
+              return false;
+            }
+            if (!mapMightHaveLoosePrim(a, b, key, item1, opts, channel)) {
+              return false;
+            }
+            if (!set) { set = new $Set$2(); }
+            $setAdd(set, key);
+          }
+        }
+      }
+
+      if (set) {
+        while ((resultB = iB.next()) && !resultB.done) {
+          key = resultB.value[0];
+          item2 = resultB.value[1];
+          if (key && typeof key === 'object') {
+            if (!mapHasEqualEntry(set, a, key, item2, opts, channel)) {
+              return false;
+            }
+          } else if (
+            !opts.strict
+            && (!a.has(key) || !internalDeepEqual($mapGet$1(a, key), item2, opts, channel))
+            && !mapHasEqualEntry(set, a, key, item2, object_assign({}, opts, { strict: false }), channel)
+          ) {
+            return false;
+          }
+        }
+        return $setSize(set) === 0;
+      }
+      return true;
+    }
+
+    function objEquiv(a, b, opts, channel) {
+      /* eslint max-statements: [2, 100], max-lines-per-function: [2, 120], max-depth: [2, 5] */
+      var i, key;
+
+      if (typeof a !== typeof b) { return false; }
+      if (a == null || b == null) { return false; }
+
+      if ($objToString(a) !== $objToString(b)) { return false; }
+
+      if (isArguments$1(a) !== isArguments$1(b)) { return false; }
+
+      var aIsArray = isarray(a);
+      var bIsArray = isarray(b);
+      if (aIsArray !== bIsArray) { return false; }
+
+      // TODO: replace when a cross-realm brand check is available
+      var aIsError = a instanceof Error;
+      var bIsError = b instanceof Error;
+      if (aIsError !== bIsError) { return false; }
+      if (aIsError || bIsError) {
+        if (a.name !== b.name || a.message !== b.message) { return false; }
+      }
+
+      var aIsRegex = isRegex(a);
+      var bIsRegex = isRegex(b);
+      if (aIsRegex !== bIsRegex) { return false; }
+      if ((aIsRegex || bIsRegex) && (a.source !== b.source || regexp_prototype_flags(a) !== regexp_prototype_flags(b))) {
+        return false;
+      }
+
+      var aIsDate = isDateObject(a);
+      var bIsDate = isDateObject(b);
+      if (aIsDate !== bIsDate) { return false; }
+      if (aIsDate || bIsDate) { // && would work too, because both are true or both false here
+        if ($getTime(a) !== $getTime(b)) { return false; }
+      }
+      if (opts.strict && gPO && gPO(a) !== gPO(b)) { return false; }
+
+      if (whichTypedArray(a) !== whichTypedArray(b)) {
+        return false;
+      }
+
+      var aIsBuffer = isBuffer(a);
+      var bIsBuffer = isBuffer(b);
+      if (aIsBuffer !== bIsBuffer) { return false; }
+      if (aIsBuffer || bIsBuffer) { // && would work too, because both are true or both false here
+        if (a.length !== b.length) { return false; }
+        for (i = 0; i < a.length; i++) {
+          if (a[i] !== b[i]) { return false; }
+        }
+        return true;
+      }
+
+      if (typeof a !== typeof b) { return false; }
+
+      var ka = objectKeys(a);
+      var kb = objectKeys(b);
+      // having the same number of owned properties (keys incorporates hasOwnProperty)
+      if (ka.length !== kb.length) { return false; }
+
+      // the same set of keys (although not necessarily the same order),
+      ka.sort();
+      kb.sort();
+      // ~~~cheap key test
+      for (i = ka.length - 1; i >= 0; i--) {
+        if (ka[i] != kb[i]) { return false; } // eslint-disable-line eqeqeq
+      }
+
+      // equivalent values for every corresponding key, and ~~~possibly expensive deep test
+      for (i = ka.length - 1; i >= 0; i--) {
+        key = ka[i];
+        if (!internalDeepEqual(a[key], b[key], opts, channel)) { return false; }
+      }
+
+      var aCollection = whichCollection(a);
+      var bCollection = whichCollection(b);
+      if (aCollection !== bCollection) {
+        return false;
+      }
+      if (aCollection === 'Set' || bCollection === 'Set') { // aCollection === bCollection
+        return setEquiv(a, b, opts, channel);
+      }
+      if (aCollection === 'Map') { // aCollection === bCollection
+        return mapEquiv(a, b, opts, channel);
+      }
+
+      return true;
+    }
+
+    var deepEqual$2 = function deepEqual(a, b, opts) {
+      return internalDeepEqual(a, b, opts, sideChannel());
+    };
+
     const getRelativeBounds = (rect, relativeTo, relativeDirection) => {
         const edgeDistance = 0;
         if (relativeDirection === "bottom") {
@@ -19449,7 +23508,7 @@
         }
         throw new Error("invalid relativeDirection");
     };
-    const objEqual = (objOne, objTwo) => JSON.stringify(objOne) === JSON.stringify(objTwo);
+    const objEqual = (objOne, objTwo) => deepEqual$2(objOne, objTwo, { strict: true });
     const waitFor = (invocations, callback) => {
         let left = invocations;
         return () => {
@@ -19465,6 +23524,9 @@
             this.portsBridge = portsBridge;
             this.sessionStorage = sessionStorage;
         }
+        get clientGlue() {
+            return this._clientGlue;
+        }
         get platformWindowId() {
             return this._platformClientWindowId.slice();
         }
@@ -19474,7 +23536,7 @@
                 logger.setLogger(this._systemGlue.logger);
             });
         }
-        initGlue(config, factory) {
+        initClientGlue(config, factory) {
             return __awaiter(this, void 0, void 0, function* () {
                 const port = yield this.portsBridge.createInternalClient();
                 const platformWindowData = this.sessionStorage.getWindowDataByName("Platform");
@@ -19586,6 +23648,18 @@
                 this._systemGlue.contexts.set(key, context).then(ready).catch(reject);
             }, 10000, `Timed out waiting to set the window context for: ${windowId}`);
         }
+        getServers() {
+            return this._clientGlue.interop.servers();
+        }
+        subscribeForServerAdded(callback) {
+            return this._clientGlue.interop.serverAdded(callback);
+        }
+        subscribeForMethodAdded(callback) {
+            return this._clientGlue.interop.methodAdded(callback);
+        }
+        invokeMethod(method, argumentObj, target, options, success, error) {
+            return this._clientGlue.interop.invoke(method, argumentObj, target, options, success, error);
+        }
         initSystemGlue(config) {
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
@@ -19597,6 +23671,9 @@
                     logger: logLevel
                 });
             });
+        }
+        setContext(name, data) {
+            return this._systemGlue.contexts.set(name, data);
         }
         createMethodAsync(name, handler) {
             return __awaiter(this, void 0, void 0, function* () {
@@ -19808,18 +23885,24 @@
                 if (data.type === Glue42CoreMessageTypes.platformPing.name) {
                     return this.handlePlatformPing(event.source, event.origin);
                 }
+                if (data.type === Glue42CoreMessageTypes.parentPing.name) {
+                    return this.handleParentPing(event.source, event.origin);
+                }
             });
         }
         handleRemoteConnectionRequest(source, origin, clientId, clientType, bridgeInstanceId) {
+            var _a;
             return __awaiter(this, void 0, void 0, function* () {
                 const channel = this.ioc.createMessageChannel();
                 yield this.gateway.connectClient(channel.port1, this.removeClient.bind(this));
                 const foundData = this.sessionStorage.getBridgeInstanceData(bridgeInstanceId);
                 const appName = foundData === null || foundData === void 0 ? void 0 : foundData.appName;
+                const myWindowId = (_a = this.sessionStorage.getWindowDataByName("Platform")) === null || _a === void 0 ? void 0 : _a.windowId;
                 const message = {
                     glue42core: {
                         type: Glue42CoreMessageTypes.connectionAccepted.name,
                         port: channel.port2,
+                        parentWindowId: myWindowId,
                         appName, clientId, clientType
                     }
                 };
@@ -19828,6 +23911,14 @@
                 }
                 source.postMessage(message, origin, [channel.port2]);
             });
+        }
+        handleParentPing(source, origin) {
+            const message = {
+                glue42core: {
+                    type: Glue42CoreMessageTypes.parentReady.name
+                }
+            };
+            source.postMessage(message, origin);
         }
         handlePlatformPing(source, origin) {
             const message = {
@@ -19848,15 +23939,6 @@
     }
 
     const windowOperationDecoder = oneOf$1(constant$1("openWindow"), constant$1("windowHello"), constant$1("getUrl"), constant$1("getTitle"), constant$1("setTitle"), constant$1("moveResize"), constant$1("focus"), constant$1("close"), constant$1("getBounds"), constant$1("registerWorkspaceWindow"), constant$1("unregisterWorkspaceWindow"));
-    const windowOpenSettingsDecoder$1 = object$1({
-        top: optional$1(number$1()),
-        left: optional$1(number$1()),
-        width: optional$1(nonNegativeNumberDecoder$1),
-        height: optional$1(nonNegativeNumberDecoder$1),
-        context: optional$1(anyJson$1()),
-        relativeTo: optional$1(nonEmptyStringDecoder$1),
-        relativeDirection: optional$1(windowRelativeDirectionDecoder$1)
-    });
     const openWindowConfigDecoder$1 = object$1({
         name: nonEmptyStringDecoder$1,
         url: nonEmptyStringDecoder$1,
@@ -19904,7 +23986,8 @@
         windowId: nonEmptyStringDecoder$1,
         frameId: nonEmptyStringDecoder$1,
         appName: optional$1(nonEmptyStringDecoder$1),
-        context: optional$1(anyJson$1())
+        context: optional$1(anyJson$1()),
+        title: optional$1(nonEmptyStringDecoder$1)
     });
     const isWindowInSwimlaneResultDecoder = object$1({
         inWorkspace: boolean$1()
@@ -20025,12 +24108,12 @@
     const baseChildSnapshotConfigDecoder = object$1({
         frameId: nonEmptyStringDecoder$1,
         workspaceId: nonEmptyStringDecoder$1,
-        positionIndex: nonNegativeNumberDecoder$1
+        positionIndex: number$1()
     });
     const parentSnapshotConfigDecoder = anyJson$1();
     const swimlaneWindowSnapshotConfigDecoder = intersection(baseChildSnapshotConfigDecoder, object$1({
         windowId: optional$1(nonEmptyStringDecoder$1),
-        isMaximized: boolean$1(),
+        isMaximized: optional$1(boolean$1()),
         isFocused: boolean$1(),
         title: optional$1(string$1()),
         appName: optional$1(nonEmptyStringDecoder$1)
@@ -20087,6 +24170,10 @@
                 children: array$1(oneOf$1(rowLayoutItemDecoder$2, columnLayoutItemDecoder$2, groupLayoutItemDecoder$2, windowLayoutItemDecoder$2))
             })
         }))
+    });
+    const workspacesLayoutImportConfigDecoder = object$1({
+        layout: workspaceLayoutDecoder,
+        mode: oneOf$1(constant$1("replace"), constant$1("merge"))
     });
     const exportedLayoutsResultDecoder = object$1({
         layouts: array$1(workspaceLayoutDecoder)
@@ -20228,6 +24315,9 @@
         get moveResizeOperation() {
             return this.operations.moveResize;
         }
+        get setTitleOperation() {
+            return this.operations.setTitle;
+        }
         start(config) {
             return __awaiter(this, void 0, void 0, function* () {
                 this.clientResponseTimeoutMs = config.windows.windowResponseTimeoutMs;
@@ -20259,6 +24349,12 @@
                 }
                 (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] ${operationName} command was executed successfully`);
                 return result;
+            });
+        }
+        getWindowTitle(windowId, commandId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const boundsResult = yield this.handleGetTitle({ windowId }, commandId);
+                return boundsResult.title;
             });
         }
         getWindowBounds(windowId, commandId) {
@@ -20312,7 +24408,7 @@
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling workspace window registration with id: ${data.windowId} and name: ${data.name}`);
                 this.sessionController.saveWindowData({ windowId: data.windowId, name: data.name });
-                this.sessionController.saveWorkspaceClient({ windowId: data.windowId, frameId: data.frameId });
+                this.sessionController.saveWorkspaceClient({ windowId: data.windowId, frameId: data.frameId, initialTitle: data.title });
                 if (data.context) {
                     yield this.glueController.setWindowStartContext(data.windowId, data.context);
                 }
@@ -20326,7 +24422,7 @@
             this.glueController.pushSystemMessage("windows", operation, data);
         }
         openWindow(config, commandId) {
-            var _a, _b, _c, _d;
+            var _a, _b, _c, _d, _e, _f;
             return __awaiter(this, void 0, void 0, function* () {
                 const nameExists = this.sessionController.getWindowDataByName(config.name);
                 if (nameExists) {
@@ -20335,17 +24431,17 @@
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling open command with a valid name: ${config.name}, url: ${config.url} and options: ${JSON.stringify(config.options)}`);
                 const windowData = {
                     name: config.name,
-                    windowId: shortid$1.generate()
+                    windowId: (_c = (_b = config.options) === null || _b === void 0 ? void 0 : _b.windowId) !== null && _c !== void 0 ? _c : shortid$1.generate()
                 };
                 const openBounds = yield this.getStartingBounds(config, commandId);
                 const options = `left=${openBounds.left},top=${openBounds.top},width=${openBounds.width},height=${openBounds.height}`;
-                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] calling native window open with bounds: ${options}`);
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] calling native window open with bounds: ${options}`);
                 const childWindow = window.open(config.url, windowData.windowId, options);
                 if (!childWindow) {
                     throw new Error(`Cannot open window with url: ${config.url} and name: ${config.name}. The most likely reason is that the user has not approved popups or has a blocker.`);
                 }
-                yield this.processNewWindow(windowData, (_c = config.options) === null || _c === void 0 ? void 0 : _c.context, childWindow);
-                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] the new window is opened, saved in session, state and announced, responding to the caller`);
+                yield this.processNewWindow(windowData, (_e = config.options) === null || _e === void 0 ? void 0 : _e.context, childWindow);
+                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace(`[${commandId}] the new window is opened, saved in session, state and announced, responding to the caller`);
                 return windowData;
             });
         }
@@ -20355,6 +24451,13 @@
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling a hello message from a real windowId: ${client.windowId}`);
                 if (client.windowId) {
                     this.stateController.remove(client.windowId);
+                    const workspaceClient = this.sessionController.getWorkspaceClientById(client.windowId);
+                    if (workspaceClient && workspaceClient.initialTitle) {
+                        const windowId = client.windowId;
+                        const title = workspaceClient.initialTitle;
+                        PromiseWrap$1(() => this.glueController.callWindow(this.operations.setTitle, { windowId, title }, windowId), this.clientResponseTimeoutMs)
+                            .catch((err) => { var _a; return (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] error while setting the workspace window title: ${err.message}`); });
+                    }
                 }
                 const isWorkspaceFrame = !!(client.windowId && this.sessionController.getFrameData(client.windowId));
                 const allWindows = this.sessionController.getAllWindowsData().map((w) => ({ windowId: w.windowId, name: w.name }));
@@ -20384,13 +24487,19 @@
         }
         handleSetTitle(data, commandId) {
             var _a;
-            const windowData = this.sessionController.getWindowDataById(data.windowId);
-            if (!windowData) {
-                throw new Error(`Cannot set the title of window: ${data.windowId}, because it is does not exist for the platform`);
-            }
-            (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling a set title request for window ${data.windowId} and title: ${data.title}`);
-            const timeoutMessage = `Cannot set the title of window: ${data.windowId}, because it is either a non-glue window or it hasn't initiated it's glue yet`;
-            return PromiseWrap$1(() => this.glueController.callWindow(this.operations.setTitle, data, data.windowId), this.clientResponseTimeoutMs, timeoutMessage);
+            return __awaiter(this, void 0, void 0, function* () {
+                const windowData = this.sessionController.getWindowDataById(data.windowId);
+                if (!windowData) {
+                    throw new Error(`Cannot set the title of window: ${data.windowId}, because it is does not exist for the platform`);
+                }
+                const workspaceClient = this.sessionController.getWorkspaceClientById(data.windowId);
+                if (workspaceClient) {
+                    yield this.ioc.workspacesController.setItemTitle({ itemId: data.windowId, title: data.title }, commandId);
+                }
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling a set title request for window ${data.windowId} and title: ${data.title}`);
+                const timeoutMessage = `Cannot set the title of window: ${data.windowId}, because it is either a non-glue window or it hasn't initiated it's glue yet`;
+                yield PromiseWrap$1(() => this.glueController.callWindow(this.operations.setTitle, data, data.windowId), this.clientResponseTimeoutMs, timeoutMessage);
+            });
         }
         handleMoveResize(data, commandId) {
             var _a;
@@ -20503,6 +24612,7 @@
             this.workspaceWindowsNamespace = "g42_core_workspace_clients";
             this.workspaceFramesNamespace = "g42_core_workspace_frames";
             this.layoutNamespace = "g42_core_layouts";
+            this.appDefsNamespace = "g42_core_app_definitions";
             this.sessionStorage = window.sessionStorage;
             [
                 this.bridgeInstancesNamespace,
@@ -20511,7 +24621,8 @@
                 this.nonGlueNamespace,
                 this.workspaceWindowsNamespace,
                 this.workspaceFramesNamespace,
-                this.layoutNamespace
+                this.layoutNamespace,
+                this.appDefsNamespace
             ].forEach((namespace) => {
                 const data = this.sessionStorage.getItem(namespace);
                 if (!data) {
@@ -20521,6 +24632,21 @@
         }
         get logger() {
             return logger.get("session.storage");
+        }
+        getAllApps() {
+            const appsString = JSON.parse(this.sessionStorage.getItem(this.appDefsNamespace));
+            return appsString;
+        }
+        overwriteApps(apps) {
+            this.sessionStorage.setItem(this.appDefsNamespace, JSON.stringify(apps));
+        }
+        removeApp(name) {
+            const all = this.getAllApps();
+            const app = all.find((app) => app.name === name);
+            if (app) {
+                this.sessionStorage.setItem(this.appDefsNamespace, JSON.stringify(all.filter((a) => a.name !== name)));
+            }
+            return app;
         }
         getLayoutSnapshot() {
             const snapsString = JSON.parse(this.sessionStorage.getItem(this.layoutNamespace));
@@ -20764,30 +24890,7 @@
         }
     }
 
-    const fetchTimeout = (url, timeoutMilliseconds = defaultFetchTimeoutMs) => {
-        return new Promise((resolve, reject) => {
-            let timeoutHit = false;
-            const timeout = setTimeout(() => {
-                timeoutHit = true;
-                reject(new Error(`Fetch request for: ${url} timed out at: ${timeoutMilliseconds} milliseconds`));
-            }, timeoutMilliseconds);
-            fetch(url)
-                .then((response) => {
-                if (!timeoutHit) {
-                    clearTimeout(timeout);
-                    resolve(response);
-                }
-            })
-                .catch((err) => {
-                if (!timeoutHit) {
-                    clearTimeout(timeout);
-                    reject(err);
-                }
-            });
-        });
-    };
-
-    const appManagerOperationTypesDecoder$1 = oneOf$1(constant$1("appHello"), constant$1("applicationStart"), constant$1("instanceStop"), constant$1("registerWorkspaceApp"), constant$1("unregisterWorkspaceApp"));
+    const appManagerOperationTypesDecoder$1 = oneOf$1(constant$1("appHello"), constant$1("applicationStart"), constant$1("instanceStop"), constant$1("registerWorkspaceApp"), constant$1("unregisterWorkspaceApp"), constant$1("export"), constant$1("import"), constant$1("remove"), constant$1("clear"));
     const basicInstanceDataDecoder$1 = object$1({
         id: nonEmptyStringDecoder$1
     });
@@ -20797,7 +24900,8 @@
     });
     const applicationDataDecoder$1 = object$1({
         name: nonEmptyStringDecoder$1,
-        createOptions: applicationCreateOptionsDecoder,
+        type: nonEmptyStringDecoder$1.where((s) => s === "window", "Expected a value of window"),
+        createOptions: applicationDetailsDecoder$1,
         instances: array$1(instanceDataDecoder$1),
         userProperties: optional$1(anyJson$1()),
         title: optional$1(nonEmptyStringDecoder$1),
@@ -20807,7 +24911,8 @@
     });
     const baseApplicationDataDecoder$1 = object$1({
         name: nonEmptyStringDecoder$1,
-        createOptions: applicationCreateOptionsDecoder,
+        type: nonEmptyStringDecoder$1.where((s) => s === "window", "Expected a value of window"),
+        createOptions: applicationDetailsDecoder$1,
         userProperties: optional$1(anyJson$1()),
         title: optional$1(nonEmptyStringDecoder$1),
         version: optional$1(nonEmptyStringDecoder$1),
@@ -20822,6 +24927,7 @@
     });
     const applicationStartConfigDecoder$1 = object$1({
         name: nonEmptyStringDecoder$1,
+        id: optional$1(nonEmptyStringDecoder$1),
         context: optional$1(anyJson$1()),
         top: optional$1(number$1()),
         left: optional$1(number$1()),
@@ -20830,6 +24936,16 @@
         relativeTo: optional$1(nonEmptyStringDecoder$1),
         relativeDirection: optional$1(oneOf$1(constant$1("top"), constant$1("left"), constant$1("right"), constant$1("bottom"))),
         waitForAGMReady: optional$1(boolean$1())
+    });
+    const appsImportOperationDecoder$1 = object$1({
+        definitions: array$1(allApplicationDefinitionsDecoder$1),
+        mode: oneOf$1(constant$1("replace"), constant$1("merge"))
+    });
+    const appRemoveConfigDecoder$1 = object$1({
+        name: nonEmptyStringDecoder$1
+    });
+    const appsExportOperationDecoder$1 = object$1({
+        definitions: array$1(glueCoreAppDefinitionDecoder)
     });
 
     class ApplicationsController {
@@ -20840,19 +24956,17 @@
             this.ioc = ioc;
             this.applicationStartTimeoutMs = 15000;
             this.started = false;
-            this.applications = [];
             this.locks = {};
-            this.modesExecutors = {
-                local: { setup: this.setupLocalMode.bind(this) },
-                remote: { setup: this.setupRemoteMode.bind(this) },
-                supplier: { setup: this.setupSupplierMode.bind(this) }
-            };
             this.operations = {
                 appHello: { name: "appHello", dataDecoder: appHelloDecoder, resultDecoder: appHelloSuccessDecoder$1, execute: this.handleAppHello.bind(this) },
                 applicationStart: { name: "applicationStart", dataDecoder: applicationStartConfigDecoder$1, resultDecoder: instanceDataDecoder$1, execute: this.handleApplicationStart.bind(this) },
                 instanceStop: { name: "instanceStop", dataDecoder: basicInstanceDataDecoder$1, execute: this.handleInstanceStop.bind(this) },
                 registerWorkspaceApp: { name: "registerWorkspaceApp", dataDecoder: workspaceWindowDataDecoder, execute: this.registerWorkspaceApp.bind(this) },
-                unregisterWorkspaceApp: { name: "unregisterWorkspaceApp", dataDecoder: simpleWindowDecoder$1, execute: this.unregisterWorkspaceApp.bind(this) }
+                unregisterWorkspaceApp: { name: "unregisterWorkspaceApp", dataDecoder: simpleWindowDecoder$1, execute: this.unregisterWorkspaceApp.bind(this) },
+                import: { name: "import", dataDecoder: appsImportOperationDecoder$1, execute: this.handleImport.bind(this) },
+                remove: { name: "remove", dataDecoder: appRemoveConfigDecoder$1, execute: this.handleRemove.bind(this) },
+                export: { name: "export", resultDecoder: appsExportOperationDecoder$1, execute: this.handleExport.bind(this) },
+                clear: { name: "clear", execute: this.handleClear.bind(this) }
             };
         }
         get logger() {
@@ -20863,11 +24977,20 @@
             return __awaiter(this, void 0, void 0, function* () {
                 this.config = config.applications;
                 this.defaultBounds = config.windows.defaultWindowOpenBounds;
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`initializing with mode: ${this.config.mode}`);
-                yield this.modesExecutors[this.config.mode].setup();
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("initializing applications");
+                yield this.setupApps(this.config);
                 this.started = true;
                 this.stateController.onWindowDisappeared(this.processInstanceClosed.bind(this));
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace("initialization is completed");
+            });
+        }
+        setupApps(config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (config.local && config.local.length) {
+                    const parsedDefinitions = config.local.map((def) => this.parseDefinition(def));
+                    const currentApps = this.sessionStorage.getAllApps();
+                    this.mergeImport(currentApps, parsedDefinitions);
+                }
             });
         }
         handleControl(args) {
@@ -20911,39 +25034,29 @@
             this.processInstanceClosed(config.windowId);
             this.ioc.windowsController.cleanUpWindow(config.windowId);
         }
-        processInstanceClosed(selfWindowId) {
-            if (!selfWindowId) {
-                return;
-            }
-            const instanceData = this.sessionStorage.getInstanceData(selfWindowId);
-            if (instanceData) {
-                this.sessionStorage.removeInstance(instanceData.id);
-                this.emitStreamData("instanceStopped", instanceData);
-            }
-        }
         handleApplicationStart(config, commandId) {
-            var _a, _b, _c, _d, _e, _f, _g;
+            var _a, _b, _c, _d, _e, _f, _g, _h;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling application start command for application: ${config.name}`);
-                const appDefinition = this.applications.find((app) => app.name === config.name);
+                const appDefinition = this.sessionStorage.getAllApps().find((app) => app.name === config.name);
                 if (!appDefinition) {
                     throw new Error(`Cannot start an instance of application: ${config.name}, because it is not found.`);
                 }
                 const instance = {
-                    id: shortid$1.generate(),
+                    id: (_b = config.id) !== null && _b !== void 0 ? _b : shortid$1.generate(),
                     applicationName: config.name
                 };
                 const openBounds = yield this.getStartingBounds(appDefinition.createOptions, config, commandId);
                 const options = `left=${openBounds.left},top=${openBounds.top},width=${openBounds.width},height=${openBounds.height}`;
-                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] open arguments are valid, opening to bounds: ${options}`);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] open arguments are valid, opening to bounds: ${options}`);
                 const childWindow = window.open(appDefinition.createOptions.url, instance.id, options);
                 if (!childWindow) {
                     throw new Error(`Cannot an instance with url: ${appDefinition.createOptions.url} for application: ${config.name}. The most likely reason is that the user has not approved popups or has a blocker.`);
                 }
                 this.sessionStorage.saveBridgeInstanceData({ windowId: instance.id, appName: instance.applicationName });
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] the new window has been opened successfully with id: ${instance.id}, checking for AGM ready and notifying windows`);
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] the new window has been opened successfully with id: ${instance.id}, checking for AGM ready and notifying windows`);
                 if (config.waitForAGMReady) {
-                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] wait for AGM is set, configuring the lock`);
+                    (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] wait for AGM is set, configuring the lock`);
                     this.setLock(instance.id);
                 }
                 yield this.notifyWindows(instance, config.context, childWindow);
@@ -20955,17 +25068,27 @@
                         throw new Error(`Application start for ${config.name} timed out waiting for client to initialize Glue`);
                     }
                 }
-                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] the windows controller has been successfully notified`);
+                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace(`[${commandId}] the windows controller has been successfully notified`);
                 const processConfig = {
                     data: instance,
                     monitorState: config.waitForAGMReady ? undefined : { child: childWindow },
                     context: config.context
                 };
                 yield this.processNewInstance(processConfig);
-                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace(`[${commandId}] the new instance with id ${instance.id} has been saved, announced and context set, lifting key two and responding to caller`);
-                (_g = this.locks[instance.id]) === null || _g === void 0 ? void 0 : _g.openKeyTwo();
+                (_g = this.logger) === null || _g === void 0 ? void 0 : _g.trace(`[${commandId}] the new instance with id ${instance.id} has been saved, announced and context set, lifting key two and responding to caller`);
+                (_h = this.locks[instance.id]) === null || _h === void 0 ? void 0 : _h.openKeyTwo();
                 return instance;
             });
+        }
+        processInstanceClosed(selfWindowId) {
+            if (!selfWindowId) {
+                return;
+            }
+            const instanceData = this.sessionStorage.getInstanceData(selfWindowId);
+            if (instanceData) {
+                this.sessionStorage.removeInstance(instanceData.id);
+                this.emitStreamData("instanceStopped", instanceData);
+            }
         }
         notifyWindows(instance, context, child) {
             return __awaiter(this, void 0, void 0, function* () {
@@ -20987,15 +25110,22 @@
                     delete this.locks[helloMsg.windowId];
                     (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] the lock is lifted, proceeding`);
                 }
-                if (helloMsg.windowId) {
-                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] there is a valid windowId, removing ${helloMsg.windowId} from the state controller`);
-                    this.stateController.remove(helloMsg.windowId);
-                }
                 const allInstances = this.sessionStorage.getAllInstancesData();
-                const allAppsFull = this.applications.map((app) => {
+                const allAppsFull = this.sessionStorage.getAllApps().map((app) => {
                     const appInstances = allInstances.filter((inst) => inst.applicationName === app.name);
                     return Object.assign({}, app, { instances: appInstances });
                 });
+                if (helloMsg.windowId) {
+                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] there is a valid windowId, removing ${helloMsg.windowId} from the state controller`);
+                    this.stateController.remove(helloMsg.windowId);
+                    const foundApp = allAppsFull.find((app) => app.instances.some((inst) => inst.id === helloMsg.windowId));
+                    if (foundApp && foundApp.title) {
+                        const windowId = helloMsg.windowId;
+                        const title = foundApp.title;
+                        PromiseWrap$1(() => this.glueController.callWindow(this.ioc.windowsController.setTitleOperation, { windowId, title }, windowId), 20000)
+                            .catch((err) => { var _a; return (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] error while setting the application instance title: ${err.message}`); });
+                    }
+                }
                 const helloSuccessMessage = { apps: allAppsFull };
                 (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] compiled a list of all active applications and instances and returning it to the caller`);
                 return helloSuccessMessage;
@@ -21028,6 +25158,91 @@
                 (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] instance ${inst.id} has been closed, removed from store, announced stopped and notified windows, responding to caller`);
             });
         }
+        handleImport(config, commandId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling import command`);
+                const parsedDefinitions = config.definitions.map((def) => this.parseDefinition(def));
+                const currentApps = this.sessionStorage.getAllApps();
+                if (config.mode === "replace") {
+                    this.replaceImport(currentApps, parsedDefinitions);
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] replace import command completed`);
+                    return;
+                }
+                this.mergeImport(currentApps, parsedDefinitions);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] merge import command completed`);
+                return;
+            });
+        }
+        handleRemove(config, commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling remove command for ${config.name}`);
+                const removed = this.sessionStorage.removeApp(config.name);
+                if (removed) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`definition ${removed.name} removed successfully`);
+                    this.emitStreamData("applicationRemoved", removed);
+                }
+            });
+        }
+        handleExport(_, commandId) {
+            var _a;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling export command`);
+                const all = this.sessionStorage.getAllApps();
+                const reversed = all.map((def) => this.reverseParseDefinition(def));
+                return { definitions: reversed };
+            });
+        }
+        handleClear(_, commandId) {
+            var _a;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling clear command`);
+                const allDefinitions = this.sessionStorage.getAllApps();
+                this.sessionStorage.overwriteApps([]);
+                allDefinitions.forEach((definition) => this.emitStreamData("applicationRemoved", definition));
+            });
+        }
+        mergeImport(currentApps, parsedDefinitions) {
+            var _a, _b;
+            for (const definition of parsedDefinitions) {
+                const defCurrentIdx = currentApps.findIndex((app) => app.name === definition.name);
+                if (defCurrentIdx > -1 && !objEqual(definition, currentApps[defCurrentIdx])) {
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`change detected at definition ${definition.name}`);
+                    this.emitStreamData("applicationChanged", definition);
+                    currentApps[defCurrentIdx] = definition;
+                    continue;
+                }
+                if (defCurrentIdx < 0) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`new definition: ${definition.name} detected, adding and announcing`);
+                    this.emitStreamData("applicationAdded", definition);
+                    currentApps.push(definition);
+                }
+            }
+            this.sessionStorage.overwriteApps(currentApps);
+        }
+        replaceImport(currentApps, parsedDefinitions) {
+            var _a, _b;
+            for (const definition of parsedDefinitions) {
+                const defCurrentIdx = currentApps.findIndex((app) => app.name === definition.name);
+                if (defCurrentIdx < 0) {
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`new definition: ${definition.name} detected, adding and announcing`);
+                    this.emitStreamData("applicationAdded", definition);
+                    continue;
+                }
+                if (!objEqual(definition, currentApps[defCurrentIdx])) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`change detected at definition ${definition.name}`);
+                    this.emitStreamData("applicationChanged", definition);
+                }
+                currentApps.splice(defCurrentIdx, 1);
+            }
+            currentApps.forEach((app) => {
+                var _a;
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`definition ${app.name} missing, removing and announcing`);
+                this.emitStreamData("applicationRemoved", app);
+            });
+            this.sessionStorage.overwriteApps(parsedDefinitions);
+        }
         setLock(id) {
             const lock = {};
             const keyOne = new Promise((resolve) => {
@@ -21046,7 +25261,7 @@
                 if (!data.appName) {
                     throw new Error(`Cannot register application with config: ${JSON.stringify(data)}, because no app name was found`);
                 }
-                if (!this.applications.some((app) => app.name === data.appName)) {
+                if (!this.sessionStorage.getAllApps().some((app) => app.name === data.appName)) {
                     throw new Error(`Cannot register application with config: ${JSON.stringify(data)}, because no app with this name name was found`);
                 }
                 this.sessionStorage.saveBridgeInstanceData({ windowId: data.windowId, appName: data.appName });
@@ -21073,76 +25288,28 @@
                 this.emitStreamData("instanceStarted", config.data);
             });
         }
-        setupLocalMode() {
-            var _a;
-            return __awaiter(this, void 0, void 0, function* () {
-                const parsedDefinitions = this.config.local.map((def) => this.parseDefinition(def));
-                this.applications.push(...parsedDefinitions);
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`simple local mode is configured with applications: ${this.applications.map((app) => app.name).join(", ")}`);
-            });
-        }
         emitStreamData(operation, data) {
             var _a;
             (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`sending notification of event: ${operation} with data: ${JSON.stringify(data)}`);
             this.glueController.pushSystemMessage("appManager", operation, data);
         }
-        setupRemoteMode() {
-            var _a, _b, _c, _d;
-            return __awaiter(this, void 0, void 0, function* () {
-                const store = this.config.remote;
-                if (!store) {
-                    throw new Error("Cannot initiate the Applications lib, because the selected mode is remote, but there is no remote store definition");
-                }
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`setting up remote mode for store at: ${store.url}`);
-                const fetchFunc = this.getRemoteStoreFetchFunc(store.url);
-                let apps;
-                try {
-                    apps = yield fetchFunc();
-                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`initial apps fetch successful, saving ${apps.map((a) => a.name).join(", ")}`);
-                }
-                catch (error) {
-                    const errorString = JSON.stringify(error);
-                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`Cannot initiate the AppManager, because the provided remote store threw: ${errorString}`);
-                    throw new Error(`Cannot initiate the AppManager, because the provided remote store threw: ${errorString}`);
-                }
-                this.applications.push(...apps);
-                if (store.pollingInterval) {
-                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`polling interval detected at ${store.pollingInterval}, setting up`);
-                    yield this.wait(store.pollingInterval);
-                    this.pollForDefinitions(fetchFunc, store.pollingInterval, store.requestTimeout);
-                }
-            });
-        }
-        setupSupplierMode() {
-            var _a, _b, _c, _d;
-            return __awaiter(this, void 0, void 0, function* () {
-                const supplier = this.config.supplier;
-                if (!supplier) {
-                    throw new Error("Cannot initiate the Applications lib, because the selected mode is supplier, but there is no supplier definition");
-                }
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("setting up supplier mode");
-                const fetchFunc = this.getSupplierFetchFunc(supplier.fetch);
-                let apps;
-                try {
-                    apps = yield fetchFunc();
-                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`initial apps fetch successful, saving ${apps.map((a) => a.name).join(", ")}`);
-                }
-                catch (error) {
-                    const errorString = JSON.stringify(error);
-                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`Cannot initiate the AppManager, because the provided supplier threw: ${errorString}`);
-                    throw new Error(`Cannot initiate the AppManager, because the provided supplier threw: ${errorString}`);
-                }
-                this.applications.push(...apps);
-                if (supplier.pollingInterval) {
-                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`polling interval detected at ${supplier.pollingInterval}, setting up`);
-                    yield this.wait(supplier.pollingInterval);
-                    this.pollForDefinitions(fetchFunc, supplier.pollingInterval, supplier.timeout);
-                }
-            });
+        reverseParseDefinition(definition) {
+            const definitionDetails = definition.userProperties.details;
+            const _a = definition.userProperties, removedDetails = __rest(_a, ["details"]);
+            return {
+                name: definition.name,
+                type: definition.type || "window",
+                title: definition.title,
+                version: definition.version,
+                icon: definition.icon,
+                caption: definition.caption,
+                details: definitionDetails,
+                customProperties: removedDetails
+            };
         }
         parseDefinition(definition) {
             var _a;
-            const glue42CoreAppProps = ["name", "title", "version", "customProperties", "icon", "caption"];
+            const glue42CoreAppProps = ["name", "title", "version", "customProperties", "icon", "caption", "type"];
             const userProperties = Object.fromEntries(Object.entries(definition).filter(([key]) => !glue42CoreAppProps.includes(key)));
             let createOptions = { url: "" };
             if (definition.manifest) {
@@ -21156,8 +25323,9 @@
             else {
                 createOptions = definition.details;
             }
-            return {
+            const baseDefinition = {
                 createOptions,
+                type: definition.type || "window",
                 name: definition.name,
                 title: definition.title,
                 version: definition.version,
@@ -21165,72 +25333,10 @@
                 caption: definition.caption,
                 userProperties: Object.assign(Object.assign({}, userProperties), definition.customProperties)
             };
-        }
-        pollForDefinitions(getDefs, intervalMs, timeoutMs = defaultFetchTimeoutMs) {
-            var _a, _b, _c, _d, _e;
-            return __awaiter(this, void 0, void 0, function* () {
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("polling for new definitions");
-                let parsedDefinitions;
-                try {
-                    parsedDefinitions = yield PromiseWrap$1(getDefs, timeoutMs, "Timeout of new definitions fetch reached!");
-                }
-                catch (error) {
-                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`Polling for new definitions failed, because of: ${JSON.stringify(error)}`);
-                    yield this.wait(intervalMs);
-                    this.pollForDefinitions(getDefs, timeoutMs, intervalMs);
-                    return;
-                }
-                for (const definition of parsedDefinitions) {
-                    const defCurrentIdx = this.applications.findIndex((app) => app.name === definition.name);
-                    if (defCurrentIdx < 0) {
-                        (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`new definition: ${definition.name} detected, adding and announcing`);
-                        this.emitStreamData("applicationAdded", definition);
-                        continue;
-                    }
-                    if (!objEqual(definition, this.applications[defCurrentIdx])) {
-                        (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`change detected at definition ${definition.name}`);
-                        this.emitStreamData("applicationChanged", definition);
-                    }
-                    this.applications.splice(defCurrentIdx, 1);
-                }
-                this.applications.forEach((app) => {
-                    var _a;
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`definition ${app.name} missing, removing and announcing`);
-                    this.emitStreamData("applicationRemoved", app);
-                });
-                this.applications = parsedDefinitions;
-                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace("poll completed, setting next");
-                yield this.wait(intervalMs);
-                this.pollForDefinitions(getDefs, timeoutMs, intervalMs);
-            });
-        }
-        getRemoteStoreFetchFunc(url) {
-            return () => __awaiter(this, void 0, void 0, function* () {
-                const response = yield fetchTimeout(url);
-                const responseJSON = yield response.json();
-                if (!responseJSON || !responseJSON.message || responseJSON.message !== "OK") {
-                    throw new Error("The remote store did not respond with an OK message");
-                }
-                const apps = responseJSON.applications;
-                if (!apps || !Array.isArray(apps)) {
-                    throw new Error("The remote store did not respond with valid applications collection");
-                }
-                const verifiedApps = appsCollectionDecoder.runWithException(apps);
-                return verifiedApps.map((app) => this.parseDefinition(app));
-            });
-        }
-        getSupplierFetchFunc(supplierFetch) {
-            return () => __awaiter(this, void 0, void 0, function* () {
-                const apps = yield supplierFetch();
-                if (!apps || !Array.isArray(apps)) {
-                    throw new Error("The remote store did not respond with valid applications collection");
-                }
-                const verifiedApps = appsCollectionDecoder.runWithException(apps);
-                return verifiedApps.map((app) => this.parseDefinition(app));
-            });
-        }
-        wait(timeMs) {
-            return new Promise((resolve) => setTimeout(resolve, timeMs));
+            if (!baseDefinition.userProperties.details) {
+                baseDefinition.userProperties.details = createOptions;
+            }
+            return baseDefinition;
         }
         getStartingBounds(appDefOptions, openOptions, commandId) {
             var _a;
@@ -21271,6 +25377,11 @@
     const allLayoutsFullConfigDecoder$1 = object$1({
         layouts: array$1(layoutDecoder)
     });
+    const importModeDecoder$1 = oneOf$1(constant$1("replace"), constant$1("merge"));
+    const layoutsImportConfigDecoder$1 = object$1({
+        layouts: array$1(layoutDecoder),
+        mode: importModeDecoder$1
+    });
     const allLayoutsSummariesResultDecoder$1 = object$1({
         summaries: array$1(layoutSummaryDecoder$1)
     });
@@ -21282,22 +25393,16 @@
     });
 
     class LayoutsController$1 {
-        constructor(glueController, localMode, removeMode, supplierMode) {
+        constructor(glueController, idbStore, sessionStore) {
             this.glueController = glueController;
-            this.localMode = localMode;
-            this.removeMode = removeMode;
-            this.supplierMode = supplierMode;
+            this.idbStore = idbStore;
+            this.sessionStore = sessionStore;
             this.started = false;
-            this.modesExecutors = {
-                local: this.localMode,
-                remote: this.removeMode,
-                supplier: this.supplierMode
-            };
             this.operations = {
                 get: { name: "get", dataDecoder: simpleLayoutConfigDecoder$1, resultDecoder: optionalSimpleLayoutResult$1, execute: this.handleGetLayout.bind(this) },
                 getAll: { name: "getAll", dataDecoder: getAllLayoutsConfigDecoder$1, resultDecoder: allLayoutsSummariesResultDecoder$1, execute: this.handleGetAll.bind(this) },
                 export: { name: "export", dataDecoder: getAllLayoutsConfigDecoder$1, resultDecoder: allLayoutsFullConfigDecoder$1, execute: this.handleExport.bind(this) },
-                import: { name: "import", dataDecoder: allLayoutsFullConfigDecoder$1, execute: this.handleImport.bind(this) },
+                import: { name: "import", dataDecoder: layoutsImportConfigDecoder$1, execute: this.handleImport.bind(this) },
                 remove: { name: "remove", dataDecoder: simpleLayoutConfigDecoder$1, execute: this.handleRemove.bind(this) }
             };
         }
@@ -21309,8 +25414,9 @@
             return __awaiter(this, void 0, void 0, function* () {
                 this.config = config.layouts;
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`initializing with mode: ${this.config.mode}`);
-                yield this.modesExecutors[this.config.mode].setup(config.layouts);
-                this.modesExecutors[this.config.mode].onLayoutEvent((payload) => this.emitStreamData(payload.operation, payload.data));
+                if (this.config.local && this.config.local.length) {
+                    yield this.mergeImport(this.config.local);
+                }
                 this.started = true;
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace("initialization is completed");
             });
@@ -21340,10 +25446,6 @@
                 return result;
             });
         }
-        handleClientUnloaded(windowId) {
-            var _a;
-            (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`skipping unload handling for ${windowId}, because this controller has does not care`);
-        }
         handleGetAll(config, commandId) {
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
@@ -21371,19 +25473,30 @@
             });
         }
         handleImport(config, commandId) {
-            var _a, _b;
+            var _a, _b, _c, _d;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling mass import request for layout names: ${config.layouts.map((l) => l.name).join(", ")}`);
-                yield this.save(config.layouts);
-                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] mass import completed, responding to caller`);
+                if (config.mode === "merge") {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] importing the layouts in merge mode`);
+                    yield this.mergeImport(config.layouts);
+                }
+                else {
+                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] importing the layouts in replace mode`);
+                    yield this.replaceImport(config.layouts);
+                }
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] mass import completed, responding to caller`);
             });
         }
         handleRemove(config, commandId) {
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling remove request for ${JSON.stringify(config)}`);
-                const success = yield this.delete(config.name, config.type);
-                const operationMessage = success ? "has been removed" : "has not been removed, because it does not exist";
+                const layout = yield (yield this.getAll(config.type)).find((l) => l.name === config.name && l.type === config.type);
+                if (layout) {
+                    yield this.delete(config.name, config.type);
+                    this.emitStreamData("layoutRemoved", layout);
+                }
+                const operationMessage = layout ? "has been removed" : "has not been removed, because it does not exist";
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] ${config.name} of type ${config.type} ${operationMessage}`);
             });
         }
@@ -21402,262 +25515,92 @@
             (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`sending notification of event: ${operation} with data: ${JSON.stringify(data)}`);
             this.glueController.pushSystemMessage("layouts", operation, data);
         }
-        getAll(type) {
-            return this.modesExecutors[this.config.mode].getAll(type);
-        }
-        save(layouts) {
-            return this.modesExecutors[this.config.mode].save(layouts);
-        }
-        delete(name, type) {
-            return this.modesExecutors[this.config.mode].delete(name, type);
-        }
-    }
-
-    class LocalLayoutsMode {
-        constructor(idbStore) {
-            this.idbStore = idbStore;
-            this.registry = lib$4();
-        }
-        get logger() {
-            return logger.get("layouts.local");
-        }
-        onLayoutEvent(callback) {
-            return this.registry.add("layoutEvent", callback);
-        }
-        setup(config) {
-            var _a;
+        mergeImport(layouts) {
+            var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
-                this.config = config;
-                const localLayouts = config.local;
-                yield Promise.all(localLayouts.map((layout) => this.idbStore.store(layout, layout.type)));
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("All initial layouts have been imported in the local store");
-            });
-        }
-        getAll(type) {
-            var _a;
-            return __awaiter(this, void 0, void 0, function* () {
-                const allLayouts = yield this.idbStore.getAll(type);
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`fetched all layouts with type: ${type} from the local store`);
-                return allLayouts;
-            });
-        }
-        save(layouts) {
-            return __awaiter(this, void 0, void 0, function* () {
-                yield Promise.all(layouts.map((layout) => __awaiter(this, void 0, void 0, function* () {
-                    var _a, _b, _c;
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`starting the save and announce procedure for layout: ${layout.name} of type: ${layout.type}`);
-                    const allLayouts = yield this.getAll(layout.type);
-                    const existingLayout = allLayouts.find((l) => l.name === layout.name && l.type === layout.type);
-                    if (existingLayout && JSON.stringify(layout) === JSON.stringify(existingLayout)) {
-                        (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`skipping local save, because no change was detected in layout ${layout.name} of type ${layout.type}`);
-                        return;
-                    }
-                    const layoutEvent = existingLayout ? "layoutChanged" : "layoutAdded";
-                    yield this.idbStore.store(layout, layout.type);
-                    this.registry.execute("layoutEvent", { operation: layoutEvent, data: layout });
-                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`layout: ${layout.name} of type: ${layout.type} has been successfully saved in the local store and announced as ${layoutEvent}`);
-                })));
-            });
-        }
-        delete(name, type) {
-            var _a;
-            return __awaiter(this, void 0, void 0, function* () {
-                const layoutToRemove = (yield this.getAll(type)).find((layout) => layout.name === name && layout.type === type);
-                if (!layoutToRemove) {
-                    return false;
-                }
-                yield this.idbStore.delete(name, type);
-                this.registry.execute("layoutEvent", { operation: "layoutRemoved", data: layoutToRemove });
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`layout with name ${name} and type ${type} has been successfully removed from the local store and announced`);
-                return true;
-            });
-        }
-    }
-
-    class RemoteLayoutsMode {
-        setup(config) {
-            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
-        }
-        onLayoutEvent(callback) {
-            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
-        }
-        getAll(type) {
-            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
-        }
-        save(layouts) {
-            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
-        }
-        delete(name, type) {
-            throw new Error("Remote layouts mode is not available in Glue42 Core at the moment");
-        }
-    }
-
-    class AsyncIntervals {
-        constructor() {
-            this.intervalsLookup = {};
-        }
-        set(callback, interval, immediateStart = true) {
-            if (callback && typeof callback === "function") {
-                const intervalId = shortid$1.generate();
-                this.intervalsLookup[intervalId] = true;
-                this.runAsyncInterval(callback, interval, intervalId, immediateStart);
-                return intervalId;
-            }
-            else {
-                throw new Error("Callback must be a function");
-            }
-        }
-        clear(id) {
-            delete this.intervalsLookup[id];
-        }
-        runAsyncInterval(callback, interval, intervalId, execute) {
-            return __awaiter(this, void 0, void 0, function* () {
-                if (!this.intervalsLookup[intervalId]) {
-                    return;
-                }
-                if (execute) {
-                    yield callback();
-                }
-                if (this.intervalsLookup[intervalId]) {
-                    setTimeout(() => this.runAsyncInterval(callback, interval, intervalId, true), interval);
-                }
-            });
-        }
-    }
-    var asyncIntervals = new AsyncIntervals();
-
-    class SupplierLayoutsMode {
-        constructor(sessionController) {
-            this.sessionController = sessionController;
-            this.registry = lib$4();
-        }
-        get logger() {
-            return logger.get("layouts.supplier");
-        }
-        setup(config) {
-            var _a, _b, _c, _d, _e, _f;
-            return __awaiter(this, void 0, void 0, function* () {
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("setting up supplier mode for layouts");
-                if (!config.supplier) {
-                    throw new Error("Cannot set up a supplier mode for layouts, because there is not supplier provided");
-                }
-                if (!config.supplier.save || !config.supplier.delete) {
-                    throw new Error("Cannot set up a supplier mode for layouts, because the provided supplier is missing either a save or delete methods or both0");
-                }
-                this.supplier = config.supplier;
-                this.pollMs = (_b = config.supplier.pollingInterval) !== null && _b !== void 0 ? _b : 30000;
-                this.supplierTimeoutMs = (_c = config.supplier.timeout) !== null && _c !== void 0 ? _c : 10000;
-                try {
-                    yield this.nativeChangeDetection();
-                }
-                catch (error) {
-                    let errorMessage;
-                    if (error && error.stack && error.message) {
-                        errorMessage = error.message;
-                    }
-                    else {
-                        errorMessage = JSON.stringify(error);
-                    }
-                    (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`Cannot initiate Layouts, because the provided supplier threw: ${errorMessage}`);
-                    throw new Error(`Cannot initiate Layouts, because the provided supplier threw: ${errorMessage}`);
-                }
-                if (this.supplier.pollingInterval) {
-                    (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace("activating polling, because poll interval was specified");
-                    this.startInterval();
-                }
-                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace("supplier mode is completed, initial poll was successful.");
-            });
-        }
-        onLayoutEvent(callback) {
-            return this.registry.add("layoutEvent", callback);
-        }
-        getAll(type) {
-            return __awaiter(this, void 0, void 0, function* () {
-                this.stopInterval();
-                yield this.doChangeDetection();
-                this.startInterval();
-                return this.sessionController.getLayoutSnapshot().layouts;
-            });
-        }
-        save(layouts) {
-            return __awaiter(this, void 0, void 0, function* () {
-                if (!this.supplier.save) {
-                    throw new Error("Cannot proceed save to supplier request, because the saved supplier does not have a save method");
-                }
-                this.stopInterval();
-                this.supplier.save(layouts);
-                yield this.doChangeDetection();
-                this.startInterval();
-            });
-        }
-        delete(name, type) {
-            return __awaiter(this, void 0, void 0, function* () {
-                if (!this.supplier.delete) {
-                    throw new Error("Cannot proceed delete to supplier request, because the saved supplier does not have a delete method");
-                }
-                this.stopInterval();
-                const layoutToDelete = this.sessionController.getLayoutSnapshot().layouts.find((l) => l.name === name && l.type === type);
-                if (!layoutToDelete) {
-                    return false;
-                }
-                yield this.supplier.delete([layoutToDelete]);
-                yield this.doChangeDetection();
-                const isDeleted = this.sessionController.getLayoutSnapshot().layouts.every((l) => l.name !== name && l.type !== type);
-                this.startInterval();
-                return isDeleted;
-            });
-        }
-        doChangeDetection() {
-            return this.nativeChangeDetection()
-                .catch((error) => {
-                var _a;
-                let errorMessage;
-                if (error && error.stack && error.message) {
-                    errorMessage = error.message;
-                }
-                else {
-                    errorMessage = JSON.stringify(error);
-                }
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`Supplier change detection error during building snapshot: ${errorMessage}`);
-            });
-        }
-        startInterval() {
-            return __awaiter(this, void 0, void 0, function* () {
-                this.currentIntervalId = asyncIntervals.set(this.doChangeDetection.bind(this), this.pollMs, false);
-            });
-        }
-        stopInterval() {
-            if (this.currentIntervalId) {
-                asyncIntervals.clear(this.currentIntervalId);
-                delete this.currentIntervalId;
-            }
-        }
-        nativeChangeDetection() {
-            var _a, _b, _c;
-            return __awaiter(this, void 0, void 0, function* () {
-                const supplierSnapshot = yield PromiseWrap$1(this.supplier.fetch.bind(this), this.supplierTimeoutMs, "The provided supplied timed out when fetching new layouts");
-                supplierSnapshot.forEach((layout) => glueLayoutDecoder$1.runWithException(layout));
-                const snapshot = this.sessionController.getLayoutSnapshot();
-                for (const layout of supplierSnapshot) {
-                    const layoutCurrentIdx = snapshot.layouts.findIndex((l) => l.name === layout.name && l.type === layout.type);
-                    if (layoutCurrentIdx < 0) {
-                        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`new layout: ${layout.name} - ${layout.type} detected, adding and announcing`);
-                        this.registry.execute("layoutEvent", { operation: "layoutAdded", data: layout });
+                const currentLayouts = yield this.getAll("Workspace");
+                const pendingEvents = [];
+                for (const layout of layouts) {
+                    const defCurrentIdx = currentLayouts.findIndex((app) => app.name === layout.name);
+                    if (defCurrentIdx > -1 && !objEqual(layout, currentLayouts[defCurrentIdx])) {
+                        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`change detected at layout ${layout.name}`);
+                        pendingEvents.push({ operation: "layoutChanged", layout });
+                        currentLayouts[defCurrentIdx] = layout;
                         continue;
                     }
-                    if (!objEqual(layout, snapshot.layouts[layoutCurrentIdx])) {
-                        (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`change detected at layout ${layout.name} - ${layout.type}`);
-                        this.registry.execute("layoutEvent", { operation: "layoutChanged", data: layout });
+                    if (defCurrentIdx < 0) {
+                        (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`new layout: ${layout.name} detected, adding and announcing`);
+                        pendingEvents.push({ operation: "layoutAdded", layout });
+                        currentLayouts.push(layout);
                     }
-                    snapshot.layouts.splice(layoutCurrentIdx, 1);
                 }
-                snapshot.layouts.forEach((l) => {
+                yield this.cleanSave(currentLayouts);
+                pendingEvents.forEach((pending) => this.emitStreamData(pending.operation, pending.layout));
+            });
+        }
+        replaceImport(layouts) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                const currentLayouts = yield this.getAll("Workspace");
+                const pendingEvents = [];
+                for (const layout of layouts) {
+                    const defCurrentIdx = currentLayouts.findIndex((app) => app.name === layout.name);
+                    if (defCurrentIdx < 0) {
+                        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`new layout: ${layout.name} detected, adding and announcing`);
+                        pendingEvents.push({ operation: "layoutAdded", layout });
+                        continue;
+                    }
+                    if (!objEqual(layout, currentLayouts[defCurrentIdx])) {
+                        (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`change detected at layout ${layout.name}`);
+                        pendingEvents.push({ operation: "layoutChanged", layout });
+                    }
+                    currentLayouts.splice(defCurrentIdx, 1);
+                }
+                currentLayouts.forEach((layout) => {
                     var _a;
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`layout ${l.name} - ${l.type} missing, removing and announcing`);
-                    this.registry.execute("layoutEvent", { operation: "layoutRemoved", data: l });
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`layout ${layout.name} missing, removing and announcing`);
+                    pendingEvents.push({ operation: "layoutRemoved", layout });
                 });
-                this.sessionController.saveLayoutSnapshot({ layouts: supplierSnapshot });
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace("poll completed, setting next");
+                yield this.cleanSave(layouts);
+                pendingEvents.forEach((pending) => this.emitStreamData(pending.operation, pending.layout));
+            });
+        }
+        getAll(type) {
+            return __awaiter(this, void 0, void 0, function* () {
+                let all;
+                if (this.config.mode === "idb") {
+                    all = yield this.idbStore.getAll(type);
+                }
+                else {
+                    all = this.sessionStore.getLayoutSnapshot().layouts;
+                }
+                return all;
+            });
+        }
+        cleanSave(layouts) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (this.config.mode === "idb") {
+                    yield this.idbStore.clear("Workspace");
+                    for (const layout of layouts) {
+                        yield this.idbStore.store(layout, layout.type);
+                    }
+                    return;
+                }
+                this.sessionStore.saveLayoutSnapshot({ layouts });
+            });
+        }
+        delete(name, type) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (this.config.mode === "idb") {
+                    yield this.idbStore.delete(name, type);
+                    return;
+                }
+                const all = this.sessionStore.getLayoutSnapshot().layouts;
+                const idxToRemove = all.findIndex((l) => l.name === name && l.type);
+                if (idxToRemove > -1) {
+                    all.splice(idxToRemove, 1);
+                }
+                this.sessionStore.saveLayoutSnapshot({ layouts: all });
             });
         }
     }
@@ -21950,6 +25893,15 @@
                 }
             });
         }
+        clear(layoutType) {
+            return __awaiter(this, void 0, void 0, function* () {
+                switch (layoutType) {
+                    case "Workspace": return (yield this.database).clear("workspaceLayouts");
+                    case "Global": return (yield this.database).clear("globalLayouts");
+                    default: throw new Error(`The provided layout type is not recognized: ${layoutType}`);
+                }
+            });
+        }
         get(name, layoutType) {
             return __awaiter(this, void 0, void 0, function* () {
                 switch (layoutType) {
@@ -21999,7 +25951,7 @@
                 openWorkspace: { name: "openWorkspace", dataDecoder: openWorkspaceConfigDecoder, resultDecoder: workspaceSnapshotResultDecoder, execute: this.openWorkspace.bind(this) },
                 deleteLayout: { name: "deleteLayout", dataDecoder: deleteLayoutConfigDecoder, resultDecoder: voidResultDecoder, execute: this.deleteLayout.bind(this) },
                 saveLayout: { name: "saveLayout", dataDecoder: workspaceLayoutSaveConfigDecoder, resultDecoder: workspaceLayoutDecoder, execute: this.saveLayout.bind(this) },
-                importLayout: { name: "importLayout", dataDecoder: workspaceLayoutDecoder, resultDecoder: voidResultDecoder, execute: this.importLayout.bind(this) },
+                importLayout: { name: "importLayout", dataDecoder: workspacesLayoutImportConfigDecoder, resultDecoder: voidResultDecoder, execute: this.importLayout.bind(this) },
                 exportAllLayouts: { name: "exportAllLayouts", resultDecoder: exportedLayoutsResultDecoder, execute: this.exportAllLayouts.bind(this) },
                 restoreItem: { name: "restoreItem", dataDecoder: simpleItemConfigDecoder, resultDecoder: voidResultDecoder, execute: this.restoreItem.bind(this) },
                 maximizeItem: { name: "maximizeItem", dataDecoder: simpleItemConfigDecoder, resultDecoder: voidResultDecoder, execute: this.maximizeItem.bind(this) },
@@ -22091,6 +26043,16 @@
                 (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] targeting frame ${frame.windowId}`);
                 yield this.glueController.callFrame(this.operations.closeItem, config, frame.windowId);
                 (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
+        setItemTitle(config, commandId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling setItemTitle request with config ${JSON.stringify(config)}`);
+                const frame = yield this.framesController.getFrameInstance(config);
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                yield this.glueController.callFrame(this.operations.setItemTitle, config, frame.windowId);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
             });
         }
         handleFrameHello(config, commandId) {
@@ -22192,7 +26154,7 @@
             var _a, _b, _c;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling openWorkspace command for name: ${config.name}`);
-                const frame = yield this.framesController.getFrameInstance({ frameId: (_b = config.options) === null || _b === void 0 ? void 0 : _b.frameId, newFrame: (_c = config.options) === null || _c === void 0 ? void 0 : _c.newFrame });
+                const frame = yield this.framesController.getFrameInstance({ frameId: (_b = config.restoreOptions) === null || _b === void 0 ? void 0 : _b.frameId, newFrame: (_c = config.restoreOptions) === null || _c === void 0 ? void 0 : _c.newFrame });
                 const result = yield this.glueController.callFrame(this.operations.openWorkspace, config, frame.windowId);
                 return result;
             });
@@ -22219,8 +26181,8 @@
         importLayout(config, commandId) {
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling importLayout command for layout ${config.name}`);
-                yield this.ioc.layoutsController.handleImport({ layouts: [config] }, commandId);
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling importLayout command for layout ${config.layout.name}`);
+                yield this.ioc.layoutsController.handleImport({ layouts: [config.layout], mode: config.mode }, commandId);
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] the layouts controller successfully imported the layout, responding to caller`);
             });
         }
@@ -22324,16 +26286,6 @@
                 return result;
             });
         }
-        setItemTitle(config, commandId) {
-            var _a, _b, _c;
-            return __awaiter(this, void 0, void 0, function* () {
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling setItemTitle request with config ${JSON.stringify(config)}`);
-                const frame = yield this.framesController.getFrameInstance(config);
-                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
-                yield this.glueController.callFrame(this.operations.setItemTitle, config, frame.windowId);
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
-            });
-        }
         moveWindowTo(config, commandId) {
             var _a, _b, _c;
             return __awaiter(this, void 0, void 0, function* () {
@@ -22400,6 +26352,371 @@
                 yield this.glueController.callWindow(this.ioc.windowsController.moveResizeOperation, moveConfig, frame.windowId);
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] frame with id ${frame.windowId} was successfully moved, responding to caller`);
             });
+        }
+    }
+
+    const intentsOperationTypesDecoder$1 = oneOf$1(constant$1("findIntent"), constant$1("getIntents"), constant$1("raiseIntent"));
+    const intentHandlerDecoder$1 = object$1({
+        applicationName: nonEmptyStringDecoder$1,
+        applicationTitle: string$1(),
+        applicationDescription: optional$1(string$1()),
+        applicationIcon: optional$1(string$1()),
+        type: oneOf$1(constant$1("app"), constant$1("instance")),
+        displayName: optional$1(string$1()),
+        contextTypes: optional$1(array$1(nonEmptyStringDecoder$1)),
+        instanceId: optional$1(string$1()),
+        instanceTitle: optional$1(string$1())
+    });
+    const intentDecoder$1 = object$1({
+        name: nonEmptyStringDecoder$1,
+        handlers: array$1(intentHandlerDecoder$1)
+    });
+    const intentTargetDecoder$1 = oneOf$1(constant$1("startNew"), constant$1("reuse"), object$1({
+        app: optional$1(nonEmptyStringDecoder$1),
+        instance: optional$1(nonEmptyStringDecoder$1)
+    }));
+    const intentContextDecoder$1 = object$1({
+        type: optional$1(nonEmptyStringDecoder$1),
+        data: optional$1(object$1())
+    });
+    const intentsDecoder$1 = array$1(intentDecoder$1);
+    const wrappedIntentsDecoder$1 = object$1({
+        intents: intentsDecoder$1
+    });
+    const wrappedIntentFilterDecoder$1 = object$1({
+        filter: optional$1(object$1({
+            name: optional$1(nonEmptyStringDecoder$1),
+            contextType: optional$1(nonEmptyStringDecoder$1)
+        }))
+    });
+    const intentRequestDecoder$1 = object$1({
+        intent: nonEmptyStringDecoder$1,
+        target: optional$1(intentTargetDecoder$1),
+        context: optional$1(intentContextDecoder$1),
+        options: optional$1(windowOpenSettingsDecoder$1)
+    });
+    const intentResultDecoder$1 = object$1({
+        request: intentRequestDecoder$1,
+        handler: intentHandlerDecoder$1,
+        result: anyJson$1()
+    });
+
+    class IntentsController$1 {
+        constructor(glueController, sessionStorage, ioc) {
+            this.glueController = glueController;
+            this.sessionStorage = sessionStorage;
+            this.ioc = ioc;
+            this.operations = {
+                getIntents: { name: "getIntents", resultDecoder: wrappedIntentsDecoder$1, execute: this.getWrappedIntents.bind(this) },
+                findIntent: { name: "findIntent", dataDecoder: wrappedIntentFilterDecoder$1, resultDecoder: wrappedIntentsDecoder$1, execute: this.findIntent.bind(this) },
+                raiseIntent: { name: "raiseIntent", dataDecoder: intentRequestDecoder$1, resultDecoder: intentResultDecoder$1, execute: this.raiseIntent.bind(this) }
+            };
+            this.started = false;
+        }
+        get logger() {
+            return logger.get("intents.controller");
+        }
+        start() {
+            return __awaiter(this, void 0, void 0, function* () {
+                this.started = true;
+            });
+        }
+        handleControl(args) {
+            var _a, _b, _c, _d;
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!this.started) ;
+                const intentsData = args.data;
+                const commandId = args.commandId;
+                const operationValidation = intentsOperationTypesDecoder$1.run(args.operation);
+                if (!operationValidation.ok) {
+                    throw new Error(`This intents request cannot be completed, because the operation name did not pass validation: ${JSON.stringify(operationValidation.error)}`);
+                }
+                const operationName = operationValidation.result;
+                const incomingValidation = (_a = this.operations[operationName].dataDecoder) === null || _a === void 0 ? void 0 : _a.run(intentsData);
+                if (incomingValidation && !incomingValidation.ok) {
+                    throw new Error(`Intents request for ${operationName} rejected, because the provided arguments did not pass the validation: ${JSON.stringify(incomingValidation.error)}`);
+                }
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.debug(`[${commandId}] ${operationName} command is valid with data: ${JSON.stringify(intentsData)}`);
+                const result = yield this.operations[operationName].execute(intentsData, commandId);
+                const resultValidation = (_c = this.operations[operationName].resultDecoder) === null || _c === void 0 ? void 0 : _c.run(result);
+                if (resultValidation && !resultValidation.ok) {
+                    throw new Error(`Intents request for ${operationName} could not be completed, because the operation result did not pass the validation: ${JSON.stringify(resultValidation.error)}`);
+                }
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] ${operationName} command was executed successfully`);
+                return result;
+            });
+        }
+        extractAppIntents(apps) {
+            const intents = {};
+            const appsWithIntents = apps.filter((app) => app.intents.length > 0);
+            for (const app of appsWithIntents) {
+                for (const intentDef of app.intents) {
+                    if (!intents[intentDef.name]) {
+                        intents[intentDef.name] = [];
+                    }
+                    const handler = {
+                        applicationName: app.name,
+                        applicationTitle: app.title,
+                        applicationDescription: app.caption,
+                        displayName: intentDef.displayName,
+                        contextTypes: intentDef.contexts,
+                        applicationIcon: app.icon,
+                        type: "app"
+                    };
+                    intents[intentDef.name].push(handler);
+                }
+            }
+            return intents;
+        }
+        getInstanceIntents(apps, commandId) {
+            var _a;
+            return __awaiter(this, void 0, void 0, function* () {
+                const intents = {};
+                for (const server of this.glueController.getServers()) {
+                    const serverIntentsMethods = (((_a = server.getMethods) === null || _a === void 0 ? void 0 : _a.call(server)) || []).filter((method) => method.name.startsWith(GlueWebIntentsPrefix));
+                    yield Promise.all(serverIntentsMethods.map((method) => __awaiter(this, void 0, void 0, function* () {
+                        const intentName = method.name.replace(GlueWebIntentsPrefix, "");
+                        if (!intents[intentName]) {
+                            intents[intentName] = [];
+                        }
+                        const info = method.flags;
+                        const app = apps.find((appDef) => appDef.name === server.application);
+                        let appIntent;
+                        if (app && app.intents) {
+                            appIntent = app.intents.find((appDefIntent) => appDefIntent.name === intentName);
+                        }
+                        let title;
+                        if (server.windowId) {
+                            title = yield this.ioc.windowsController.getWindowTitle(server.windowId, commandId);
+                        }
+                        const handler = {
+                            instanceId: server.windowId || server.instance,
+                            applicationName: server.application || "",
+                            applicationIcon: info.icon || (app === null || app === void 0 ? void 0 : app.icon),
+                            applicationTitle: (app === null || app === void 0 ? void 0 : app.title) || "",
+                            applicationDescription: info.description || (app === null || app === void 0 ? void 0 : app.caption),
+                            displayName: info.displayName || (appIntent === null || appIntent === void 0 ? void 0 : appIntent.displayName),
+                            contextTypes: info.contextTypes || (appIntent === null || appIntent === void 0 ? void 0 : appIntent.contexts),
+                            instanceTitle: title,
+                            type: "instance"
+                        };
+                        intents[intentName].push(handler);
+                    })));
+                }
+                return intents;
+            });
+        }
+        mergeIntentStores(storeOne, storeTwo) {
+            const intents = {};
+            for (const name of new Set([...Object.keys(storeOne), ...Object.keys(storeTwo)])) {
+                intents[name] = [...(storeOne[name] || []), ...(storeTwo[name] || [])];
+            }
+            return intents;
+        }
+        wrapIntents(intents) {
+            return {
+                intents
+            };
+        }
+        getIntents(commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                const apps = this.sessionStorage.getAllApps().map((app) => {
+                    return {
+                        name: app.name,
+                        title: app.title || "",
+                        icon: app.icon,
+                        caption: app.caption,
+                        intents: app.userProperties.intents || []
+                    };
+                });
+                const appIntentsStore = this.extractAppIntents(apps);
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] got app intents`);
+                const instanceIntentsStore = yield this.getInstanceIntents(apps, commandId);
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] got instance intents`);
+                const allIntentsStore = this.mergeIntentStores(appIntentsStore, instanceIntentsStore);
+                const intents = Object.keys(allIntentsStore).map((name) => ({ name, handlers: allIntentsStore[name] }));
+                return intents;
+            });
+        }
+        getWrappedIntents(commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling getIntents command`);
+                const intents = yield this.getIntents(commandId);
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] getIntents command completed`);
+                return this.wrapIntents(intents);
+            });
+        }
+        findIntent(wrappedIntentFilter, commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling findIntent command`);
+                const intentFilter = wrappedIntentFilter.filter;
+                let intents = yield this.getIntents(commandId);
+                if (!intentFilter) {
+                    return this.wrapIntents(intents);
+                }
+                if (typeof intentFilter === "string") {
+                    return this.wrapIntents(intents.filter((intent) => intent.name === intentFilter));
+                }
+                if (intentFilter.contextType) {
+                    const ctToLower = intentFilter.contextType.toLowerCase();
+                    intents = intents.filter((intent) => intent.handlers.some((handler) => { var _a; return (_a = handler.contextTypes) === null || _a === void 0 ? void 0 : _a.some((ct) => ct.toLowerCase() === ctToLower); }));
+                }
+                if (intentFilter.name) {
+                    intents = intents.filter((intent) => intent.name === intentFilter.name);
+                }
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] findIntent command completed`);
+                return this.wrapIntents(intents);
+            });
+        }
+        getIntent(intent, commandId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                return (yield this.getIntents(commandId)).find((registeredIntent) => registeredIntent.name === intent);
+            });
+        }
+        startApp(config, commandId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const instance = yield this.ioc.applicationsController.handleApplicationStart(config, commandId);
+                return instance.id;
+            });
+        }
+        waitForServer(instanceId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                let unsub;
+                const executor = (resolve) => {
+                    unsub = this.glueController.subscribeForServerAdded((server) => {
+                        if (server.windowId === instanceId || server.instance === instanceId) {
+                            resolve(server);
+                        }
+                    });
+                };
+                return PromisePlus$3(executor, 30 * 1000, `Can not find interop server for instance ${instanceId}`).finally(() => unsub());
+            });
+        }
+        waitForMethod(methodName, instanceId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                let unsub;
+                const executor = (resolve) => {
+                    unsub = this.glueController.subscribeForMethodAdded((addedMethod) => {
+                        if (addedMethod.name === methodName) {
+                            resolve(addedMethod);
+                        }
+                    });
+                };
+                return PromisePlus$3(executor, 10 * 1000, `Can not find interop method ${methodName} for instance ${instanceId}`).finally(() => unsub());
+            });
+        }
+        instanceIdToInteropInstance(instanceId) {
+            var _a;
+            const servers = this.glueController.getServers();
+            return (_a = servers.find((server) => server.windowId === instanceId || server.instance === instanceId)) === null || _a === void 0 ? void 0 : _a.instance;
+        }
+        raiseIntentToInstance(instanceId, intent, context) {
+            var _a;
+            return __awaiter(this, void 0, void 0, function* () {
+                const methodName = `${GlueWebIntentsPrefix}${intent}`;
+                let interopServer = this.glueController.getServers().find((server) => server.windowId === instanceId || server.instance === instanceId);
+                if (!interopServer) {
+                    interopServer = yield this.waitForServer(instanceId);
+                }
+                const method = (_a = interopServer.getMethods) === null || _a === void 0 ? void 0 : _a.call(interopServer).find((registeredMethod) => registeredMethod.name === methodName);
+                if (!method) {
+                    yield this.waitForMethod(methodName, instanceId);
+                }
+                const result = yield this.glueController.invokeMethod(methodName, context, { instance: this.instanceIdToInteropInstance(instanceId) });
+                return result.returned;
+            });
+        }
+        raiseIntent(intentRequest, commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling raiseIntent command`);
+                const intentName = intentRequest.intent;
+                const intentDef = yield this.getIntent(intentName, commandId);
+                if (!intentDef) {
+                    throw new Error(`Intent ${intentName} not found!`);
+                }
+                const isDynamicIntent = !intentDef.handlers.some((intentDefHandler) => intentDefHandler.type === "app");
+                const target = intentRequest.target || (isDynamicIntent ? "reuse" : "startNew");
+                let handler;
+                const anAppHandler = intentDef.handlers.find((intentHandler) => intentHandler.type === "app");
+                if (target === "startNew") {
+                    handler = anAppHandler;
+                }
+                else if (target === "reuse") {
+                    const anInstanceHandler = intentDef.handlers.find((intentHandler) => intentHandler.type === "instance");
+                    handler = anInstanceHandler || anAppHandler;
+                }
+                else if (target.instance) {
+                    handler = intentDef.handlers.find((intentHandler) => intentHandler.type === "instance" && intentHandler.instanceId === target.instance);
+                }
+                else if (target.app) {
+                    handler = intentDef.handlers.find((intentHandler) => intentHandler.type === "app" && intentHandler.applicationName === target.app);
+                }
+                else {
+                    throw new Error(`Invalid intent target: ${JSON.stringify(target)}`);
+                }
+                if (!handler) {
+                    throw new Error(`Can not raise intent for request ${JSON.stringify(intentRequest)} - can not find intent handler!`);
+                }
+                handler.instanceId;
+                if (handler.type === "app") {
+                    handler.instanceId = yield this.startApp(Object.assign({ name: handler.applicationName }, intentRequest.options), commandId);
+                }
+                if (!handler.instanceId) {
+                    throw new Error(`Can not raise intent for request ${JSON.stringify(intentRequest)} - handler is missing instanceId!`);
+                }
+                const result = yield this.raiseIntentToInstance(handler.instanceId, intentName, intentRequest.context);
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] raiseIntent command completed`);
+                return {
+                    request: intentRequest,
+                    handler,
+                    result
+                };
+            });
+        }
+    }
+
+    class ChannelsController$1 {
+        constructor(glueController) {
+            this.glueController = glueController;
+        }
+        get logger() {
+            return logger.get("channels.controller");
+        }
+        start(config) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                const channelDefinitions = config.channels.definitions;
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("initializing channels");
+                yield this.setupChannels(channelDefinitions);
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace("initialization is completed");
+            });
+        }
+        handleControl() {
+            return __awaiter(this, void 0, void 0, function* () {
+            });
+        }
+        setupChannels(channels) {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield Promise.all(channels.map((channel) => this.addChannel(channel)));
+            });
+        }
+        addChannel(info) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const context = {
+                    name: info.name,
+                    meta: info.meta,
+                    data: info.data || {}
+                };
+                const contextName = this.createContextName(context.name);
+                yield this.glueController.setContext(contextName, context);
+            });
+        }
+        createContextName(channelName) {
+            return `${ChannelContextPrefix}${channelName}`;
         }
     }
 
@@ -22559,7 +26876,7 @@
         }
         get controller() {
             if (!this._mainController) {
-                this._mainController = new PlatformController(this.glueController, this.windowsController, this.applicationsController, this.layoutsController, this.workspacesController, this.portsBridge, this.stateController);
+                this._mainController = new PlatformController(this.glueController, this.windowsController, this.applicationsController, this.layoutsController, this.workspacesController, this.intentsController, this.channelsController, this.portsBridge, this.stateController);
             }
             return this._mainController;
         }
@@ -22595,7 +26912,7 @@
         }
         get layoutsController() {
             if (!this._layoutsController) {
-                this._layoutsController = new LayoutsController$1(this.glueController, this.localLayoutsMode, this.remoteLayoutsMode, this.supplierLayoutsMode);
+                this._layoutsController = new LayoutsController$1(this.glueController, this.idbStore, this.sessionController);
             }
             return this._layoutsController;
         }
@@ -22605,29 +26922,23 @@
             }
             return this._workspacesController;
         }
+        get intentsController() {
+            if (!this._intentsController) {
+                this._intentsController = new IntentsController$1(this.glueController, this.sessionController, this);
+            }
+            return this._intentsController;
+        }
+        get channelsController() {
+            if (!this._channelsController) {
+                this._channelsController = new ChannelsController$1(this.glueController);
+            }
+            return this._channelsController;
+        }
         get framesController() {
             if (!this._framesController) {
                 this._framesController = new FramesController(this.sessionController, this.glueController, this);
             }
             return this._framesController;
-        }
-        get localLayoutsMode() {
-            if (!this._localLayoutsMode) {
-                this._localLayoutsMode = new LocalLayoutsMode(this.idbStore);
-            }
-            return this._localLayoutsMode;
-        }
-        get remoteLayoutsMode() {
-            if (!this._remoteLayoutsMode) {
-                this._remoteLayoutsMode = new RemoteLayoutsMode();
-            }
-            return this._remoteLayoutsMode;
-        }
-        get supplierLayoutsMode() {
-            if (!this._supplierLayoutsMode) {
-                this._supplierLayoutsMode = new SupplierLayoutsMode(this.sessionController);
-            }
-            return this._supplierLayoutsMode;
         }
         get idbStore() {
             if (!this._idbStore) {
@@ -22647,15 +26958,22 @@
     }
 
     const glueWebPlatformFactory = (config) => __awaiter(void 0, void 0, void 0, function* () {
-        if (window.glue42gd) {
+        var _a, _b, _c, _d;
+        if (window.glue42gd || (config === null || config === void 0 ? void 0 : config.clientOnly)) {
             const glue = (config === null || config === void 0 ? void 0 : config.glueFactory) ?
                 yield (config === null || config === void 0 ? void 0 : config.glueFactory(config === null || config === void 0 ? void 0 : config.glue)) :
                 yield glueWebFactory(config === null || config === void 0 ? void 0 : config.glue);
+            if (window.glue42gd && ((_b = (_a = config === null || config === void 0 ? void 0 : config.applications) === null || _a === void 0 ? void 0 : _a.local) === null || _b === void 0 ? void 0 : _b.length)) {
+                yield glue.appManager.inMemory.import(config.applications.local, "merge");
+            }
+            if (window.glue42gd && ((_d = (_c = config === null || config === void 0 ? void 0 : config.layouts) === null || _c === void 0 ? void 0 : _c.local) === null || _d === void 0 ? void 0 : _d.length)) {
+                yield glue.layouts.import(config.layouts.local, "merge");
+            }
             return { glue };
         }
         const ioc = new IoC$1(config);
         yield ioc.platform.ready();
-        const glue = yield ioc.platform.createClientGlue(config === null || config === void 0 ? void 0 : config.glue, config === null || config === void 0 ? void 0 : config.glueFactory);
+        const glue = yield ioc.platform.getClientGlue();
         return { glue, platform: ioc === null || ioc === void 0 ? void 0 : ioc.platform.exposeAPI() };
     });
 

@@ -5,25 +5,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ClientB</title>
-    <script src="./web.umd.js"></script>
-    <script src="./workspaces.umd.js"></script>
+    <!-- <script src="./web.umd.js"></script> -->
+    <!-- <script src="./platform.web.umd.js"></script> -->
+    <!-- <script src="./workspaces.umd.js"></script> -->
 </head>
 
 <body>
     <h1>Client B</h1>
 </body>
 <script>
-    const config = {
-        libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
-        systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
-    };
+    // const config = {
+    //     libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
+    //     systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
+    // };
 
-    GlueWeb(config)
-        .then((glue) => {
-            window.glue = glue;
-            console.log("done");
-        })
-        .catch(console.warn);
+    // GlueWeb()
+    //     .then((glue) => {
+    //         window.glue = glue;
+    //         console.log("done");
+    //     })
+    //     .catch(console.warn);
+    // GlueWebPlatform({
+    //     clientOnly: true,
+    //     glue: config
+    // })
+    //     .then((data) => {
+    //         window.glue = data.glue;
+    //         console.log("plat ");
+    //         console.log("done");
+    //     })
+    //     .catch(console.warn);
 </script>
 
 </html>
