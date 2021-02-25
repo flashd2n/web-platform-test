@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>main</title>
+    <title>Main</title>
     <script src="./platform.web.umd.js"></script>
     <script src="./workspaces.umd.js"></script>
 </head>
@@ -23,6 +23,7 @@
             {
                 name: "SimpleOne",
                 type: "window",
+                title: "SimpleOne",
                 details: {
                     url: "http://localhost:9200/"
                 },
@@ -33,134 +34,91 @@
         ]
     }
 
-    // const applications = {
-    //     mode: "remote",
-    //     remote: {
-    //         url: "http://localhost:4224/api/glue-apps",
-    //         pollingInterval: 10000,
-    //         requestTimeout: 5000
-    //     }
-    // }
-
-    // const applications = {
-    //     mode: "supplier",
-    //     supplier: {
-    //         fetch: async () => {
-    //             const response = await fetch("http://localhost:4224/api/glue-apps")
-    //             const parsed = await response.json();
-
-    //             return parsed.applications;
-    //         },
-    //         pollingInterval: 3000
-    //     }
-    // }
-
 
     // POSSIBLE LAYOUTS CONFIG:
 
-    // const layouts = {
-    //     mode: "session",
-    //     local: [
-    //         { "name": "example", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} },
-    //         { "name": "not-example", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} }
-    //     ]
-    // }
-
-    // const layouts = {
-    //     mode: "remote",
-    //     remote: {
-    //         url: "http://localhost:4224/api/glue-layouts",
-    //         pollingInterval: 10000,
-    //         requestTimeout: 5000
-    //     }
-    // }
-
-    // const layouts = {
-    //     mode: "supplier",
-    //     supplier: {
-    //         fetch: async () => {
-    //             const response = await fetch("http://localhost:4224/api/glue-layouts")
-    //             const parsed = await response.json();
-
-    //             return parsed.applications;
-    //         },
-    //         save: async () => {
-    //             console.log("fake saving - does not really save anywhere");
-    //         },
-    //         delete: async () => {
-    //             console.log("fake deleting - does not really delete from anywhere");
-    //         },
-    //         pollingInterval: 10000,
-    //         timeout: 5000
-    //     }
-    // }
-
-    // const config = {
-    //     glue: {
-    //         libraries: [GlueWorkspaces],
-    //         systemLogger: { level: "trace" }, // you can set this to trace for maximum console output,
-    //     },
-    //     layouts,
-    //     applications,
-    //     workspaces: {
-    //         src: "http://localhost:9000/workspace"
-    //     }
-    // }
-
-    // let counter = 0;
-
-    // const cleanUp = async () => {
-    //     const frames = await glue.workspaces.getAllFrames();
-    //     await Promise.all(frames.map((frame) => frame.close()));
-    // };
-
-    // const action = async () => {
-    //     const oneWsp = await glue.workspaces.restoreWorkspace("example");
-    //     const twoWsp = await glue.workspaces.restoreWorkspace("example");
-
-    //     await oneWsp.close();
-    // };
-
-    // const testIt = async () => {
-    //     for (const el of Array.from({ length: 1 })) {
-    //         console.log("--------------------S--------------------");
-    //         ++counter;
-    //         await action();
-    //         await cleanUp();
-    //         console.log("--------------------E--------------------");
-    //     }
-    // }
-
-    const configWithPlugins = {
-        applications,
-        plugins: {
-            definitions: [
-                {
-                    name: "first-plugin",
-                    config: { test: 42 },
-                    start: (glue, config) => {
-                        // WebSocket
-                        // fetch
-                        // glue
-                        console.log("works believe me");
-                        console.log(config);
-                        console.log(glue.appManager.applications());
+    const layouts = {
+        mode: "session",
+        local: [
+            { "name": "example2", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne", "title": "asd" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} },
+            { "name": "not-example", "type": "Workspace", "components": [{ "type": "Workspace", "state": { "config": { "name": "second", "title": "Untitled 1" }, "context": {}, "children": [{ "type": "column", "config": {}, "children": [{ "type": "row", "config": {}, "children": [{ "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }, { "type": "group", "config": {}, "children": [{ "type": "window", "config": { "appName": "SimpleOne" } }] }] }] } }], "metadata": {} },
+            {
+                "name": "asd",
+                "type": "Workspace",
+                "metadata": {},
+                "components": [
+                    {
+                        "type": "Workspace",
+                        "state": {
+                            "config": {
+                                "name": "asd",
+                                "title": "Untitled 1"
+                            },
+                            "context": null,
+                            "children": [
+                                {
+                                    "type": "column",
+                                    "config": {},
+                                    "children": [
+                                        {
+                                            "type": "group",
+                                            "config": {},
+                                            "children": [
+                                                {
+                                                    "type": "window",
+                                                    "config": {
+                                                        "appName": "SimpleOne"
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
                     }
-                }
-            ]
-        }
+                ]
+            }
+        ]
     };
 
-    GlueWebPlatform(configWithPlugins)
+    // const plugins = {
+    //     definitions: [
+    //         {
+    //             name: "first-plugin",
+    //             config: { test: 42 },
+    //             start: (glue, config) => {
+    //                 // WebSocket
+    //                 // fetch
+    //                 // glue
+    //                 console.log("works believe me");
+    //                 console.log(config);
+    //                 console.log(glue.appManager.applications());
+    //             }
+    //         }
+    //     ]
+    // };
+
+    const config = {
+        glue: {
+            libraries: [GlueWorkspaces],
+            systemLogger: { level: "debug" }, // you can set this to trace for maximum console output,
+        },
+        layouts,
+        applications,
+        workspaces: {
+            src: "http://localhost:9300"
+        }
+    }
+
+    GlueWebPlatform(config)
         .then((data) => {
             window.glue = data.glue;
             console.log("done");
-            // return testIt();
         })
         .then(() => console.log("test done"))
         .catch((err) => {
             console.warn(err);
-            console.log(`FAILED AT ${counter}`);
         });
 </script>
 

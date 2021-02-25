@@ -4,37 +4,72 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClientB</title>
-    <!-- <script src="./web.umd.js"></script> -->
-    <!-- <script src="./platform.web.umd.js"></script> -->
-    <!-- <script src="./workspaces.umd.js"></script> -->
+    <title>Client B</title>
+    <script src="./web.umd.js"></script>
+    <script src="./workspaces.umd.js"></script>
+    <style>
+        body {
+            background-color: powderblue;
+        }
+    </style>
 </head>
 
 <body>
     <h1>Client B</h1>
+
+    <h3>Window Context:</h3>
+    <p id="winCtx"></p>
+
+    <h3>Workspace Context:</h3>
+    <p id="wspCtx"></p>
 </body>
 <script>
-    // const config = {
-    //     libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
-    //     systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
-    // };
+    const displayCtx = (ctxType, ctx) => {
+        const el = document.getElementById(ctxType);
+        el.innerHTML = JSON.stringify(ctx);
+    };
 
-    // GlueWeb()
-    //     .then((glue) => {
-    //         window.glue = glue;
-    //         console.log("done");
-    //     })
-    //     .catch(console.warn);
-    // GlueWebPlatform({
-    //     clientOnly: true,
-    //     glue: config
-    // })
-    //     .then((data) => {
-    //         window.glue = data.glue;
-    //         console.log("plat ");
-    //         console.log("done");
-    //     })
-    //     .catch(console.warn);
+    const setUpContexts = async () => {
+        const windowContext = await glue.windows.my().getContext();
+        displayCtx("winCtx", windowContext);
+
+        glue.windows.my().onContextUpdated((ctx) => {
+            console.log("Window context update");
+            console.log(ctx);
+            displayCtx("winCtx", ctx);
+        });
+
+        if (!glue.workspaces) {
+            return;
+        }
+
+        const inWorkspace = await glue.workspaces.inWorkspace();
+
+        if (inWorkspace) {
+            const myWsp = await glue.workspaces.getMyWorkspace();
+
+            myWsp.onContextUpdated((ctx) => {
+                console.log("wsp context update");
+                console.log(ctx);
+                displayCtx("wspCtx", ctx);
+            });
+        }
+
+    }
+
+    const config = {
+        libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
+        systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
+    };
+
+    GlueWeb(config)
+        .then((glue) => {
+            window.glue = glue;
+
+            return setUpContexts();
+        })
+        .then(() => console.log("done"))
+        .catch(console.warn);
 </script>
 
 </html>

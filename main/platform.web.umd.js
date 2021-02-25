@@ -56,6 +56,18 @@
     PERFORMANCE OF THIS SOFTWARE.
     ***************************************************************************** */
 
+    function __rest$1(s, e) {
+        var t = {};
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+            t[p] = s[p];
+        if (s != null && typeof Object.getOwnPropertySymbols === "function")
+            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                    t[p[i]] = s[p[i]];
+            }
+        return t;
+    }
+
     function __awaiter$1(thisArg, _arguments, P, generator) {
         function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
         return new (P || (P = Promise))(function (resolve, reject) {
@@ -252,7 +264,7 @@
         return __assign.apply(this, arguments);
     };
 
-    function __rest$1(s, e) {
+    function __rest$1$1(s, e) {
         var t = {};
         for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
             t[p] = s[p];
@@ -344,7 +356,7 @@
         return paths.map(function (path) { return (typeof path === 'string' ? "." + path : "[" + path + "]"); }).join('');
     };
     var prependAt = function (newAt, _a) {
-        var at = _a.at, rest = __rest$1(_a, ["at"]);
+        var at = _a.at, rest = __rest$1$1(_a, ["at"]);
         return (__assign({ at: newAt + (at || '') }, rest));
     };
     /**
@@ -1062,8 +1074,8 @@
     const layoutTypeDecoder = oneOf(constant("Global"), constant("Activity"), constant("ApplicationDefault"), constant("Swimlane"), constant("Workspace"));
     const componentTypeDecoder = oneOf(constant("application"), constant("activity"));
     const windowLayoutComponentDecoder = object({
-        type: constant("window"),
-        componentType: componentTypeDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
+        componentType: optional(componentTypeDecoder),
         state: object({
             name: anyJson(),
             context: anyJson(),
@@ -1078,7 +1090,8 @@
         type: constant("window"),
         config: object({
             appName: nonEmptyStringDecoder,
-            url: optional(nonEmptyStringDecoder)
+            url: optional(nonEmptyStringDecoder),
+            title: optional(string())
         })
     });
     const groupLayoutItemDecoder = object({
@@ -2312,6 +2325,7 @@
             });
         }
         onAdded(callback) {
+            this.export().then((layouts) => layouts.forEach((layout) => callback(layout))).catch(() => { });
             return this.registry.add(operations$2.layoutAdded.name, callback);
         }
         onChanged(callback) {
@@ -2482,8 +2496,12 @@
                     }
                 }
             };
-            const flags = typeof intent === "string" ? { intent } : intent;
-            this.interop.register({ name: methodName, flags }, (args) => {
+            let intentFlag = {};
+            if (typeof intent === "object") {
+                const rest = __rest$1(intent, ["intent"]);
+                intentFlag = rest;
+            }
+            this.interop.register({ name: methodName, flags: { intent: intentFlag } }, (args) => {
                 if (subscribed) {
                     return handler(args);
                 }
@@ -2756,7 +2774,7 @@
         }
     }
 
-    var version = "2.0.4";
+    var version = "2.0.9";
 
     const createFactoryFunction = (coreFactoryFunction) => {
         return (userConfig) => __awaiter$1(void 0, void 0, void 0, function* () {
@@ -3610,7 +3628,8 @@
                 return;
             }
             this.lastCount = allEntries.length;
-            this.system.stringMetric("entries", JSON.stringify(allEntries));
+            var jsonfiedEntries = allEntries.map(function (i) { return i.toJSON(); });
+            this.system.stringMetric("entries", JSON.stringify(jsonfiedEntries));
         };
         return PerfTracker;
     }());
@@ -5831,7 +5850,7 @@
         }
     };
 
-    var version$1 = "5.4.0";
+    var version$1 = "5.4.1";
 
     function prepareConfig (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -6845,10 +6864,17 @@
     function rejectAfter(ms, promise, error) {
         if (ms === void 0) { ms = 0; }
         var timeout;
-        promise.finally(function () {
+        var clearTimeoutIfThere = function () {
             if (timeout) {
                 clearTimeout(timeout);
             }
+        };
+        promise
+            .then(function () {
+            clearTimeoutIfThere();
+        })
+            .catch(function () {
+            clearTimeoutIfThere();
         });
         return new Promise(function (resolve, reject) {
             timeout = setTimeout(function () { return reject(error); }, ms);
@@ -9399,7 +9425,7 @@
                 logger: _logger.subLogger("metrics"),
                 canUpdateMetric: canUpdateMetric,
                 system: "Glue42",
-                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : "metrics-service",
+                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : internalConfig.application,
                 instance: (_d = (_c = identity === null || identity === void 0 ? void 0 : identity.instance) !== null && _c !== void 0 ? _c : identity === null || identity === void 0 ? void 0 : identity.windowId) !== null && _d !== void 0 ? _d : shortid(),
                 disableAutoAppSystem: disableAutoAppSystem,
                 pagePerformanceMetrics: typeof config !== "boolean" ? config === null || config === void 0 ? void 0 : config.pagePerformanceMetrics : undefined
@@ -9596,6 +9622,20 @@
         delete windowAny.GlueCore;
     }
     glueWebFactory.version = version;
+
+    const fallbackToEnterprise = (config) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b, _c, _d;
+        const glue = (config === null || config === void 0 ? void 0 : config.glueFactory) ?
+            yield (config === null || config === void 0 ? void 0 : config.glueFactory(config === null || config === void 0 ? void 0 : config.glue)) :
+            yield glueWebFactory(config === null || config === void 0 ? void 0 : config.glue);
+        if ((_b = (_a = config === null || config === void 0 ? void 0 : config.applications) === null || _a === void 0 ? void 0 : _a.local) === null || _b === void 0 ? void 0 : _b.length) {
+            yield glue.appManager.inMemory.import(config.applications.local, "merge");
+        }
+        if ((_d = (_c = config === null || config === void 0 ? void 0 : config.layouts) === null || _c === void 0 ? void 0 : _c.local) === null || _d === void 0 ? void 0 : _d.length) {
+            yield glue.layouts.import(config.layouts.local, "merge");
+        }
+        return { glue };
+    });
 
     var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
@@ -12282,7 +12322,8 @@
         type: constant$1("window"),
         config: object$1({
             appName: nonEmptyStringDecoder$1,
-            url: optional$1(nonEmptyStringDecoder$1)
+            url: optional$1(nonEmptyStringDecoder$1),
+            title: optional$1(string$1())
         })
     });
     const groupLayoutItemDecoder$1 = object$1({
@@ -12384,7 +12425,7 @@
         local: optional$1(array$1(allApplicationDefinitionsDecoder$1))
     });
     const layoutsConfigDecoder = object$1({
-        mode: oneOf$1(constant$1("idb"), constant$1("session")),
+        mode: optional$1(oneOf$1(constant$1("idb"), constant$1("session"))),
         local: optional$1(array$1(glueLayoutDecoder$1))
     });
     const channelsConfigDecoder = object$1({
@@ -12401,7 +12442,8 @@
     });
     const glueConfigDecoder = anyJson$1();
     const workspacesConfigDecoder = object$1({
-        src: nonEmptyStringDecoder$1
+        src: nonEmptyStringDecoder$1,
+        isFrame: optional$1(boolean$1())
     });
     const windowsConfigDecoder = object$1({
         windowResponseTimeoutMs: optional$1(nonNegativeNumberDecoder$1),
@@ -12792,7 +12834,7 @@
             return logger.get("main.web.platform");
         }
         start(config) {
-            var _a;
+            var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 yield this.portsBridge.start(config.gateway);
                 this.portsBridge.onClientUnloaded(this.handleClientUnloaded.bind(this));
@@ -12803,8 +12845,8 @@
                 ]);
                 this.stateController.start();
                 yield Promise.all(Object.values(this.controllers).map((controller) => controller.start(config)));
-                yield this.glueController.initClientGlue(config === null || config === void 0 ? void 0 : config.glue, config === null || config === void 0 ? void 0 : config.glueFactory);
-                (_a = config.plugins) === null || _a === void 0 ? void 0 : _a.definitions.forEach(this.startPlugin.bind(this));
+                yield this.glueController.initClientGlue(config === null || config === void 0 ? void 0 : config.glue, config === null || config === void 0 ? void 0 : config.glueFactory, (_a = config === null || config === void 0 ? void 0 : config.workspaces) === null || _a === void 0 ? void 0 : _a.isFrame);
+                (_b = config.plugins) === null || _b === void 0 ? void 0 : _b.definitions.forEach(this.startPlugin.bind(this));
             });
         }
         getClientGlue() {
@@ -13024,12 +13066,12 @@
 
     var cjs = deepmerge_1;
 
-    var version$3 = "1.0.3";
+    var version$3 = "1.0.8";
 
     class Platform {
         constructor(controller, config) {
             this.controller = controller;
-            this.checkSingleton();
+            this.checkSingleton(config);
             this.processConfig(config);
         }
         ready() {
@@ -13048,16 +13090,16 @@
         get version() {
             return version$3;
         }
-        checkSingleton() {
+        checkSingleton(config) {
+            var _a;
             const glue42CoreNamespace = window.glue42core;
-            if (!glue42CoreNamespace) {
-                window.glue42core = { platformStarted: true };
-                return;
-            }
-            if (glue42CoreNamespace.platformStarted) {
+            if (glue42CoreNamespace && glue42CoreNamespace.platformStarted) {
                 throw new Error("The Glue42 Core Platform has already been started for this application.");
             }
-            glue42CoreNamespace.platformStarted = true;
+            window.glue42core = {
+                platformStarted: true,
+                isPlatformFrame: !!((_a = config === null || config === void 0 ? void 0 : config.workspaces) === null || _a === void 0 ? void 0 : _a.isFrame)
+            };
         }
         processConfig(config = {}) {
             const verifiedConfig = platformConfigDecoder.runWithException(config);
@@ -13917,7 +13959,8 @@
                 return;
             }
             this.lastCount = allEntries.length;
-            this.system.stringMetric("entries", JSON.stringify(allEntries));
+            var jsonfiedEntries = allEntries.map(function (i) { return i.toJSON(); });
+            this.system.stringMetric("entries", JSON.stringify(jsonfiedEntries));
         };
         return PerfTracker;
     }());
@@ -16138,7 +16181,7 @@
         }
     };
 
-    var version$4 = "5.4.0";
+    var version$4 = "5.4.1";
 
     function prepareConfig$1 (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -17160,10 +17203,17 @@
     function rejectAfter$1(ms, promise, error) {
         if (ms === void 0) { ms = 0; }
         var timeout;
-        promise.finally(function () {
+        var clearTimeoutIfThere = function () {
             if (timeout) {
                 clearTimeout(timeout);
             }
+        };
+        promise
+            .then(function () {
+            clearTimeoutIfThere();
+        })
+            .catch(function () {
+            clearTimeoutIfThere();
         });
         return new Promise(function (resolve, reject) {
             timeout = setTimeout(function () { return reject(error); }, ms);
@@ -19714,7 +19764,7 @@
                 logger: _logger.subLogger("metrics"),
                 canUpdateMetric: canUpdateMetric,
                 system: "Glue42",
-                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : "metrics-service",
+                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : internalConfig.application,
                 instance: (_d = (_c = identity === null || identity === void 0 ? void 0 : identity.instance) !== null && _c !== void 0 ? _c : identity === null || identity === void 0 ? void 0 : identity.windowId) !== null && _d !== void 0 ? _d : shortid$2(),
                 disableAutoAppSystem: disableAutoAppSystem,
                 pagePerformanceMetrics: typeof config !== "boolean" ? config === null || config === void 0 ? void 0 : config.pagePerformanceMetrics : undefined
@@ -23536,14 +23586,10 @@
                 logger.setLogger(this._systemGlue.logger);
             });
         }
-        initClientGlue(config, factory) {
+        initClientGlue(config, factory, isWorkspaceFrame) {
             return __awaiter(this, void 0, void 0, function* () {
                 const port = yield this.portsBridge.createInternalClient();
-                const platformWindowData = this.sessionStorage.getWindowDataByName("Platform");
-                this._platformClientWindowId = platformWindowData ? platformWindowData.windowId : shortid$1.generate();
-                if (!platformWindowData) {
-                    this.sessionStorage.saveWindowData({ name: "Platform", windowId: this.platformWindowId });
-                }
+                this.registerClientWindow(isWorkspaceFrame);
                 const webConfig = {
                     application: "Platform",
                     gateway: { webPlatform: { port, windowId: this.platformWindowId } }
@@ -23664,7 +23710,7 @@
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 const port = yield this.portsBridge.createInternalClient();
-                const logLevel = (_b = (_a = config === null || config === void 0 ? void 0 : config.systemLogger) === null || _a === void 0 ? void 0 : _a.level) !== null && _b !== void 0 ? _b : "trace";
+                const logLevel = (_b = (_a = config === null || config === void 0 ? void 0 : config.systemLogger) === null || _a === void 0 ? void 0 : _a.level) !== null && _b !== void 0 ? _b : "info";
                 return yield GlueCore$1({
                     application: "Platform",
                     gateway: { webPlatform: { port } },
@@ -23674,6 +23720,22 @@
         }
         setContext(name, data) {
             return this._systemGlue.contexts.set(name, data);
+        }
+        registerClientWindow(isWorkspaceFrame) {
+            if (isWorkspaceFrame) {
+                const platformFrame = this.sessionStorage.getPlatformFrame();
+                this._platformClientWindowId = platformFrame ? platformFrame.windowId : shortid$1.generate();
+                if (!platformFrame) {
+                    const platformFrameData = { windowId: this._platformClientWindowId, active: true, isPlatform: true };
+                    this.sessionStorage.saveFrameData(platformFrameData);
+                }
+                return;
+            }
+            const platformWindowData = this.sessionStorage.getWindowDataByName("Platform");
+            this._platformClientWindowId = platformWindowData ? platformWindowData.windowId : shortid$1.generate();
+            if (!platformWindowData) {
+                this.sessionStorage.saveWindowData({ name: "Platform", windowId: this.platformWindowId });
+            }
         }
         createMethodAsync(name, handler) {
             return __awaiter(this, void 0, void 0, function* () {
@@ -24136,27 +24198,20 @@
         children: optional$1(lazy$1(() => array$1(customWorkspaceChildSnapshotDecoder))),
         type: oneOf$1(constant$1("window"), constant$1("row"), constant$1("column"), constant$1("group"))
     });
-    const windowLayoutItemDecoder$2 = object$1({
-        type: constant$1("window"),
-        config: object$1({
-            appName: nonEmptyStringDecoder$1,
-            url: optional$1(nonEmptyStringDecoder$1)
-        })
-    });
     const groupLayoutItemDecoder$2 = object$1({
         type: constant$1("group"),
         config: anyJson$1(),
-        children: array$1(oneOf$1(windowLayoutItemDecoder$2))
+        children: array$1(oneOf$1(windowLayoutItemDecoder$1))
     });
     const columnLayoutItemDecoder$2 = object$1({
         type: constant$1("column"),
         config: anyJson$1(),
-        children: array$1(oneOf$1(groupLayoutItemDecoder$2, windowLayoutItemDecoder$2, lazy$1(() => columnLayoutItemDecoder$2), lazy$1(() => rowLayoutItemDecoder$2)))
+        children: array$1(oneOf$1(groupLayoutItemDecoder$2, windowLayoutItemDecoder$1, lazy$1(() => columnLayoutItemDecoder$2), lazy$1(() => rowLayoutItemDecoder$2)))
     });
     const rowLayoutItemDecoder$2 = object$1({
         type: constant$1("row"),
         config: anyJson$1(),
-        children: array$1(oneOf$1(columnLayoutItemDecoder$2, groupLayoutItemDecoder$2, windowLayoutItemDecoder$2, lazy$1(() => rowLayoutItemDecoder$2)))
+        children: array$1(oneOf$1(columnLayoutItemDecoder$2, groupLayoutItemDecoder$2, windowLayoutItemDecoder$1, lazy$1(() => rowLayoutItemDecoder$2)))
     });
     const workspaceLayoutDecoder = object$1({
         name: nonEmptyStringDecoder$1,
@@ -24167,7 +24222,7 @@
             state: object$1({
                 config: anyJson$1(),
                 context: anyJson$1(),
-                children: array$1(oneOf$1(rowLayoutItemDecoder$2, columnLayoutItemDecoder$2, groupLayoutItemDecoder$2, windowLayoutItemDecoder$2))
+                children: array$1(oneOf$1(rowLayoutItemDecoder$2, columnLayoutItemDecoder$2, groupLayoutItemDecoder$2, windowLayoutItemDecoder$1))
             })
         }))
     });
@@ -24662,6 +24717,9 @@
             }
             allData.push(frameData);
             this.sessionStorage.setItem(this.workspaceFramesNamespace, JSON.stringify(allData));
+        }
+        getPlatformFrame() {
+            return this.getAllFrames().find((frame) => frame.isPlatform);
         }
         getAllFrames() {
             const allData = JSON.parse(this.sessionStorage.getItem(this.workspaceFramesNamespace));
@@ -26077,17 +26135,18 @@
             });
         }
         createWorkspace(config, commandId) {
-            var _a, _b, _c, _d, _e;
+            var _a, _b, _c, _d, _e, _f;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling createWorkspace command`);
                 const frameInstanceConfig = {
                     frameId: (_b = config.frame) === null || _b === void 0 ? void 0 : _b.reuseFrameId,
-                    newFrame: (_c = config.frame) === null || _c === void 0 ? void 0 : _c.newFrame
+                    newFrame: (_c = config.frame) === null || _c === void 0 ? void 0 : _c.newFrame,
+                    itemId: (_d = config.config) === null || _d === void 0 ? void 0 : _d.reuseWorkspaceId
                 };
                 const frame = yield this.framesController.getFrameInstance(frameInstanceConfig);
-                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] calling frame: ${frame.windowId}, based on selection config: ${JSON.stringify(frameInstanceConfig)}`);
+                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] calling frame: ${frame.windowId}, based on selection config: ${JSON.stringify(frameInstanceConfig)}`);
                 const result = yield this.glueController.callFrame(this.operations.createWorkspace, config, frame.windowId);
-                (_e = this.logger) === null || _e === void 0 ? void 0 : _e.trace(`[${commandId}] frame ${frame.windowId} responded with a valid snapshot, returning to caller`);
+                (_f = this.logger) === null || _f === void 0 ? void 0 : _f.trace(`[${commandId}] frame ${frame.windowId} responded with a valid snapshot, returning to caller`);
                 return result;
             });
         }
@@ -26151,10 +26210,15 @@
             });
         }
         openWorkspace(config, commandId) {
-            var _a, _b, _c;
+            var _a, _b, _c, _d;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling openWorkspace command for name: ${config.name}`);
-                const frame = yield this.framesController.getFrameInstance({ frameId: (_b = config.restoreOptions) === null || _b === void 0 ? void 0 : _b.frameId, newFrame: (_c = config.restoreOptions) === null || _c === void 0 ? void 0 : _c.newFrame });
+                const frameQueryConfig = {
+                    frameId: (_b = config.restoreOptions) === null || _b === void 0 ? void 0 : _b.frameId,
+                    newFrame: (_c = config.restoreOptions) === null || _c === void 0 ? void 0 : _c.newFrame,
+                    itemId: (_d = config.restoreOptions) === null || _d === void 0 ? void 0 : _d.reuseWorkspaceId
+                };
+                const frame = yield this.framesController.getFrameInstance(frameQueryConfig);
                 const result = yield this.glueController.callFrame(this.operations.openWorkspace, config, frame.windowId);
                 return result;
             });
@@ -26479,7 +26543,7 @@
                         if (!intents[intentName]) {
                             intents[intentName] = [];
                         }
-                        const info = method.flags;
+                        const info = method.flags.intent;
                         const app = apps.find((appDef) => appDef.name === server.application);
                         let appIntent;
                         if (app && app.intents) {
@@ -26748,7 +26812,8 @@
                 const frameWindowId = shortid$1.generate();
                 const frameData = {
                     windowId: frameWindowId,
-                    active: false
+                    active: false,
+                    isPlatform: false
                 };
                 const options = `left=${openBounds.left},top=${openBounds.top},width=${openBounds.width},height=${openBounds.height}`;
                 const frameUrl = `${this.config.src}?emptyFrame=true`;
@@ -26958,17 +27023,13 @@
     }
 
     const glueWebPlatformFactory = (config) => __awaiter(void 0, void 0, void 0, function* () {
-        var _a, _b, _c, _d;
-        if (window.glue42gd || (config === null || config === void 0 ? void 0 : config.clientOnly)) {
+        if (window.glue42gd) {
+            return fallbackToEnterprise(config);
+        }
+        if (config === null || config === void 0 ? void 0 : config.clientOnly) {
             const glue = (config === null || config === void 0 ? void 0 : config.glueFactory) ?
                 yield (config === null || config === void 0 ? void 0 : config.glueFactory(config === null || config === void 0 ? void 0 : config.glue)) :
                 yield glueWebFactory(config === null || config === void 0 ? void 0 : config.glue);
-            if (window.glue42gd && ((_b = (_a = config === null || config === void 0 ? void 0 : config.applications) === null || _a === void 0 ? void 0 : _a.local) === null || _b === void 0 ? void 0 : _b.length)) {
-                yield glue.appManager.inMemory.import(config.applications.local, "merge");
-            }
-            if (window.glue42gd && ((_d = (_c = config === null || config === void 0 ? void 0 : config.layouts) === null || _c === void 0 ? void 0 : _c.local) === null || _d === void 0 ? void 0 : _d.length)) {
-                yield glue.layouts.import(config.layouts.local, "merge");
-            }
             return { glue };
         }
         const ioc = new IoC$1(config);

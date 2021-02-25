@@ -6,17 +6,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Client A</title>
     <script src="./web.umd.js"></script>
-    <script src="./workspaces.umd.js"></script>
+    <!-- <script src="./workspaces.umd.js"></script> -->
+    <style>
+        body {
+            background-color: palegoldenrod;
+        }
+    </style>
 </head>
+
+<iframe class="border rounded flex-grow-1" src="http://localhost:9200"></iframe>
 
 <body>
     <h1>Client A</h1>
 </body>
 <script>
-    const config = {
-        libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
-        systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
-    };
+    // const config = {
+    //     libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
+    //     systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
+    // };
 
     GlueWeb()
         .then((glue) => {

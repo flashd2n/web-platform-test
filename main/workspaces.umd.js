@@ -992,7 +992,8 @@
             title: optional(nonEmptyStringDecoder),
             position: optional(nonNegativeNumberDecoder),
             isFocused: optional(boolean()),
-            noTabHeader: optional(boolean())
+            noTabHeader: optional(boolean()),
+            reuseWorkspaceId: optional(nonEmptyStringDecoder)
         })),
         frame: optional(object({
             reuseFrameId: optional(nonEmptyStringDecoder),
@@ -1077,7 +1078,8 @@
         type: constant("window"),
         config: object({
             appName: nonEmptyStringDecoder,
-            url: optional(nonEmptyStringDecoder)
+            url: optional(nonEmptyStringDecoder),
+            title: optional(string())
         })
     });
     const groupLayoutItemDecoder = object({

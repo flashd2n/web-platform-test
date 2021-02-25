@@ -6,11 +6,11 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start:workspace": "http-server ./workspace -p 9300",
-    "start:server": "node ./server/index.js",
+    "start:workspaceP": "http-server ./workspaces-platform -p 9400",
     "start:main": "http-server ./main -p 9000",
     "start:client": "http-server ./client -p 9100",
     "start:clientB": "http-server ./clientB -p 9200",
-    "start": "concurrently \"npm run start:workspace\" \"npm run start:server\" \"npm run start:main\" \"npm run start:client\" \"npm run start:clientB\""
+    "start": "concurrently \"npm run start:workspace\" \"npm run start:server\" \"npm run start:main\" \"npm run start:client\" \"npm run start:clientB\" \"npm run start:workspaceP\""
   },
   "keywords": [],
   "author": "",

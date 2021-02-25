@@ -19,6 +19,18 @@
     PERFORMANCE OF THIS SOFTWARE.
     ***************************************************************************** */
 
+    function __rest(s, e) {
+        var t = {};
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+            t[p] = s[p];
+        if (s != null && typeof Object.getOwnPropertySymbols === "function")
+            for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+                if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                    t[p[i]] = s[p[i]];
+            }
+        return t;
+    }
+
     function __awaiter(thisArg, _arguments, P, generator) {
         function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
         return new (P || (P = Promise))(function (resolve, reject) {
@@ -215,7 +227,7 @@
         return __assign.apply(this, arguments);
     };
 
-    function __rest(s, e) {
+    function __rest$1(s, e) {
         var t = {};
         for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
             t[p] = s[p];
@@ -307,7 +319,7 @@
         return paths.map(function (path) { return (typeof path === 'string' ? "." + path : "[" + path + "]"); }).join('');
     };
     var prependAt = function (newAt, _a) {
-        var at = _a.at, rest = __rest(_a, ["at"]);
+        var at = _a.at, rest = __rest$1(_a, ["at"]);
         return (__assign({ at: newAt + (at || '') }, rest));
     };
     /**
@@ -1025,8 +1037,8 @@
     const layoutTypeDecoder = oneOf(constant("Global"), constant("Activity"), constant("ApplicationDefault"), constant("Swimlane"), constant("Workspace"));
     const componentTypeDecoder = oneOf(constant("application"), constant("activity"));
     const windowLayoutComponentDecoder = object({
-        type: constant("window"),
-        componentType: componentTypeDecoder,
+        type: nonEmptyStringDecoder.where((s) => s === "window", "Expected a value of window"),
+        componentType: optional(componentTypeDecoder),
         state: object({
             name: anyJson(),
             context: anyJson(),
@@ -1041,7 +1053,8 @@
         type: constant("window"),
         config: object({
             appName: nonEmptyStringDecoder,
-            url: optional(nonEmptyStringDecoder)
+            url: optional(nonEmptyStringDecoder),
+            title: optional(string())
         })
     });
     const groupLayoutItemDecoder = object({
@@ -2275,6 +2288,7 @@
             });
         }
         onAdded(callback) {
+            this.export().then((layouts) => layouts.forEach((layout) => callback(layout))).catch(() => { });
             return this.registry.add(operations$2.layoutAdded.name, callback);
         }
         onChanged(callback) {
@@ -2445,8 +2459,12 @@
                     }
                 }
             };
-            const flags = typeof intent === "string" ? { intent } : intent;
-            this.interop.register({ name: methodName, flags }, (args) => {
+            let intentFlag = {};
+            if (typeof intent === "object") {
+                const rest = __rest(intent, ["intent"]);
+                intentFlag = rest;
+            }
+            this.interop.register({ name: methodName, flags: { intent: intentFlag } }, (args) => {
                 if (subscribed) {
                     return handler(args);
                 }
@@ -2719,7 +2737,7 @@
         }
     }
 
-    var version = "2.0.4";
+    var version = "2.0.9";
 
     const createFactoryFunction = (coreFactoryFunction) => {
         return (userConfig) => __awaiter(void 0, void 0, void 0, function* () {
@@ -3573,7 +3591,8 @@
                 return;
             }
             this.lastCount = allEntries.length;
-            this.system.stringMetric("entries", JSON.stringify(allEntries));
+            var jsonfiedEntries = allEntries.map(function (i) { return i.toJSON(); });
+            this.system.stringMetric("entries", JSON.stringify(jsonfiedEntries));
         };
         return PerfTracker;
     }());
@@ -5794,7 +5813,7 @@
         }
     };
 
-    var version$1 = "5.4.0";
+    var version$1 = "5.4.1";
 
     function prepareConfig (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -6808,10 +6827,17 @@
     function rejectAfter(ms, promise, error) {
         if (ms === void 0) { ms = 0; }
         var timeout;
-        promise.finally(function () {
+        var clearTimeoutIfThere = function () {
             if (timeout) {
                 clearTimeout(timeout);
             }
+        };
+        promise
+            .then(function () {
+            clearTimeoutIfThere();
+        })
+            .catch(function () {
+            clearTimeoutIfThere();
         });
         return new Promise(function (resolve, reject) {
             timeout = setTimeout(function () { return reject(error); }, ms);
@@ -9362,7 +9388,7 @@
                 logger: _logger.subLogger("metrics"),
                 canUpdateMetric: canUpdateMetric,
                 system: "Glue42",
-                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : "metrics-service",
+                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : internalConfig.application,
                 instance: (_d = (_c = identity === null || identity === void 0 ? void 0 : identity.instance) !== null && _c !== void 0 ? _c : identity === null || identity === void 0 ? void 0 : identity.windowId) !== null && _d !== void 0 ? _d : shortid(),
                 disableAutoAppSystem: disableAutoAppSystem,
                 pagePerformanceMetrics: typeof config !== "boolean" ? config === null || config === void 0 ? void 0 : config.pagePerformanceMetrics : undefined
