@@ -5,12 +5,14 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "start:admin": "http-server ./admin -p 8000",
     "start:workspace": "http-server ./workspace -p 9300",
     "start:workspaceP": "http-server ./workspaces-platform -p 9400",
     "start:main": "http-server ./main -p 9000",
     "start:client": "http-server ./client -p 9100",
     "start:clientB": "http-server ./clientB -p 9200",
-    "start": "concurrently \"npm run start:workspace\" \"npm run start:server\" \"npm run start:main\" \"npm run start:client\" \"npm run start:clientB\" \"npm run start:workspaceP\""
+    "start:server": "node ./server/index.js",
+    "start": "concurrently \"npm run start:admin\" \"npm run start:workspace\" \"npm run start:server\" \"npm run start:main\" \"npm run start:client\" \"npm run start:clientB\" \"npm run start:workspaceP\""
   },
   "keywords": [],
   "author": "",
@@ -21,7 +23,10 @@
     "@glue42/workspaces-api": "^1.3.1-beta.0",
     "body-parser": "^1.19.0",
     "concurrently": "^5.3.0",
+    "cors": "^2.8.5",
     "express": "^4.17.1",
-    "http-server": "^0.12.3"
+    "http-server": "^0.12.3",
+    "web-push": "^3.4.4",
+    "ws": "^7.4.6"
   }
 }

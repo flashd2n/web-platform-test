@@ -94,12 +94,12 @@
 
     const checkSingleton = () => {
         const glue42CoreNamespace = window.glue42core;
+        if (glue42CoreNamespace && glue42CoreNamespace.webStarted) {
+            throw new Error("The Glue42 Core Web has already been started for this application.");
+        }
         if (!glue42CoreNamespace) {
             window.glue42core = { webStarted: true };
             return;
-        }
-        if (glue42CoreNamespace.webStarted) {
-            throw new Error("The Glue42 Core Web has already been started for this application.");
         }
         glue42CoreNamespace.webStarted = true;
     };
@@ -912,10 +912,11 @@
 
     const nonEmptyStringDecoder = string().where((s) => s.length > 0, "Expected a non-empty string");
     const nonNegativeNumberDecoder = number().where((num) => num >= 0, "Expected a non-negative number");
-    const libDomainDecoder = oneOf(constant("windows"), constant("appManager"), constant("layouts"), constant("intents"));
-    const windowOperationTypesDecoder = oneOf(constant("openWindow"), constant("windowHello"), constant("windowAdded"), constant("windowRemoved"), constant("getBounds"), constant("getUrl"), constant("moveResize"), constant("focus"), constant("close"), constant("getTitle"), constant("setTitle"));
+    const libDomainDecoder = oneOf(constant("system"), constant("windows"), constant("appManager"), constant("layouts"), constant("intents"), constant("notifications"), constant("channels"));
+    const windowOperationTypesDecoder = oneOf(constant("openWindow"), constant("windowHello"), constant("windowAdded"), constant("windowRemoved"), constant("getBounds"), constant("getFrameBounds"), constant("getUrl"), constant("moveResize"), constant("focus"), constant("close"), constant("getTitle"), constant("setTitle"));
     const appManagerOperationTypesDecoder = oneOf(constant("appHello"), constant("applicationAdded"), constant("applicationRemoved"), constant("applicationChanged"), constant("instanceStarted"), constant("instanceStopped"), constant("applicationStart"), constant("instanceStop"), constant("clear"));
     const layoutsOperationTypesDecoder = oneOf(constant("layoutAdded"), constant("layoutChanged"), constant("layoutRemoved"), constant("get"), constant("getAll"), constant("export"), constant("import"), constant("remove"));
+    const notificationsOperationTypesDecoder = oneOf(constant("raiseNotification"), constant("requestPermission"), constant("notificationShow"), constant("notificationClick"));
     const windowRelativeDirectionDecoder = oneOf(constant("top"), constant("left"), constant("right"), constant("bottom"));
     const windowOpenSettingsDecoder = optional(object({
         top: optional(number()),
@@ -960,6 +961,14 @@
     });
     const windowBoundsResultDecoder = object({
         windowId: nonEmptyStringDecoder,
+        bounds: object({
+            top: number(),
+            left: number(),
+            width: nonNegativeNumberDecoder,
+            height: nonNegativeNumberDecoder
+        })
+    });
+    const frameWindowBoundsResultDecoder = object({
         bounds: object({
             top: number(),
             left: number(),
@@ -1091,7 +1100,9 @@
         config: object({
             appName: nonEmptyStringDecoder,
             url: optional(nonEmptyStringDecoder),
-            title: optional(string())
+            title: optional(string()),
+            allowExtract: optional(boolean()),
+            showCloseButton: optional(boolean())
         })
     });
     const groupLayoutItemDecoder = object({
@@ -1224,6 +1235,62 @@
     const channelNameDecoder = (channelNames) => {
         return nonEmptyStringDecoder.where(s => channelNames.includes(s), "Expected a valid channel name");
     };
+    const interopActionSettingsDecoder = object({
+        method: nonEmptyStringDecoder,
+        arguments: optional(anyJson()),
+        target: optional(oneOf(constant("all"), constant("best")))
+    });
+    const glue42NotificationActionDecoder = object({
+        action: string(),
+        title: nonEmptyStringDecoder,
+        icon: optional(string()),
+        interop: optional(interopActionSettingsDecoder)
+    });
+    const notificationDefinitionDecoder = object({
+        badge: optional(string()),
+        body: optional(string()),
+        data: optional(anyJson()),
+        dir: optional(oneOf(constant("auto"), constant("ltr"), constant("rtl"))),
+        icon: optional(string()),
+        image: optional(string()),
+        lang: optional(string()),
+        renotify: optional(boolean()),
+        requireInteraction: optional(boolean()),
+        silent: optional(boolean()),
+        tag: optional(string()),
+        timestamp: optional(nonNegativeNumberDecoder),
+        vibrate: optional(array(number()))
+    });
+    const glue42NotificationOptionsDecoder = object({
+        title: nonEmptyStringDecoder,
+        clickInterop: optional(interopActionSettingsDecoder),
+        actions: optional(array(glue42NotificationActionDecoder)),
+        badge: optional(string()),
+        body: optional(string()),
+        data: optional(anyJson()),
+        dir: optional(oneOf(constant("auto"), constant("ltr"), constant("rtl"))),
+        icon: optional(string()),
+        image: optional(string()),
+        lang: optional(string()),
+        renotify: optional(boolean()),
+        requireInteraction: optional(boolean()),
+        silent: optional(boolean()),
+        tag: optional(string()),
+        timestamp: optional(nonNegativeNumberDecoder),
+        vibrate: optional(array(number()))
+    });
+    const raiseNotificationDecoder = object({
+        settings: glue42NotificationOptionsDecoder,
+        id: nonEmptyStringDecoder
+    });
+    const permissionRequestResultDecoder = object({
+        permissionGranted: boolean()
+    });
+    const notificationEventPayloadDecoder = object({
+        definition: notificationDefinitionDecoder,
+        action: optional(string()),
+        id: optional(nonEmptyStringDecoder)
+    });
 
     const operations = {
         openWindow: { name: "openWindow", dataDecoder: openWindowConfigDecoder, resultDecoder: coreWindowDataDecoder },
@@ -1231,6 +1298,7 @@
         windowAdded: { name: "windowAdded", dataDecoder: coreWindowDataDecoder },
         windowRemoved: { name: "windowRemoved", dataDecoder: simpleWindowDecoder },
         getBounds: { name: "getBounds", dataDecoder: simpleWindowDecoder, resultDecoder: windowBoundsResultDecoder },
+        getFrameBounds: { name: "getFrameBounds", dataDecoder: simpleWindowDecoder, resultDecoder: frameWindowBoundsResultDecoder },
         getUrl: { name: "getUrl", dataDecoder: simpleWindowDecoder, resultDecoder: windowUrlResultDecoder },
         moveResize: { name: "moveResize", dataDecoder: windowMoveResizeConfigDecoder },
         focus: { name: "focus", dataDecoder: simpleWindowDecoder },
@@ -1571,6 +1639,7 @@
             operations.windowAdded.execute = this.handleWindowAdded.bind(this);
             operations.windowRemoved.execute = this.handleWindowRemoved.bind(this);
             operations.getBounds.execute = this.handleGetBounds.bind(this);
+            operations.getFrameBounds.execute = this.handleGetBounds.bind(this);
             operations.getTitle.execute = this.handleGetTitle.bind(this);
             operations.getUrl.execute = this.handleGetUrl.bind(this);
             operations.moveResize.execute = this.handleMoveResize.bind(this);
@@ -1636,9 +1705,10 @@
             });
         }
         handleGetBounds() {
+            var _a;
             return __awaiter$1(this, void 0, void 0, function* () {
                 return {
-                    windowId: this.me.id,
+                    windowId: (_a = this.me) === null || _a === void 0 ? void 0 : _a.id,
                     bounds: {
                         top: window.screenTop,
                         left: window.screenLeft,
@@ -1961,7 +2031,7 @@
                 onInstanceStarted: this.onInstanceStarted.bind(this),
                 onInstanceStopped: this.onInstanceStopped.bind(this)
             };
-            return Object.freeze(api);
+            return api;
         }
         addOperationsExecutors() {
             operations$1.applicationAdded.execute = this.handleApplicationAddedMessage.bind(this);
@@ -2351,60 +2421,446 @@
         }
     }
 
+    const operations$3 = {
+        raiseNotification: { name: "raiseNotification", dataDecoder: raiseNotificationDecoder },
+        requestPermission: { name: "requestPermission", resultDecoder: permissionRequestResultDecoder },
+        notificationShow: { name: "notificationShow", dataDecoder: notificationEventPayloadDecoder },
+        notificationClick: { name: "notificationClick", dataDecoder: notificationEventPayloadDecoder }
+    };
+
+    function createCommonjsModule(fn, basedir, module) {
+    	return module = {
+    	  path: basedir,
+    	  exports: {},
+    	  require: function (path, base) {
+          return commonjsRequire(path, (base === undefined || base === null) ? module.path : base);
+        }
+    	}, fn(module, module.exports), module.exports;
+    }
+
+    function commonjsRequire () {
+    	throw new Error('Dynamic requires are not currently supported by @rollup/plugin-commonjs');
+    }
+
+    // Found this seed-based random generator somewhere
+    // Based on The Central Randomizer 1.3 (C) 1997 by Paul Houle (houle@msc.cornell.edu)
+
+    var seed = 1;
+
+    /**
+     * return a random number based on a seed
+     * @param seed
+     * @returns {number}
+     */
+    function getNextValue() {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed/(233280.0);
+    }
+
+    function setSeed(_seed_) {
+        seed = _seed_;
+    }
+
+    var randomFromSeed = {
+        nextValue: getNextValue,
+        seed: setSeed
+    };
+
+    var ORIGINAL = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-';
+    var alphabet;
+    var previousSeed;
+
+    var shuffled;
+
+    function reset() {
+        shuffled = false;
+    }
+
+    function setCharacters(_alphabet_) {
+        if (!_alphabet_) {
+            if (alphabet !== ORIGINAL) {
+                alphabet = ORIGINAL;
+                reset();
+            }
+            return;
+        }
+
+        if (_alphabet_ === alphabet) {
+            return;
+        }
+
+        if (_alphabet_.length !== ORIGINAL.length) {
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL.length + ' unique characters. You submitted ' + _alphabet_.length + ' characters: ' + _alphabet_);
+        }
+
+        var unique = _alphabet_.split('').filter(function(item, ind, arr){
+           return ind !== arr.lastIndexOf(item);
+        });
+
+        if (unique.length) {
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL.length + ' unique characters. These characters were not unique: ' + unique.join(', '));
+        }
+
+        alphabet = _alphabet_;
+        reset();
+    }
+
+    function characters(_alphabet_) {
+        setCharacters(_alphabet_);
+        return alphabet;
+    }
+
+    function setSeed$1(seed) {
+        randomFromSeed.seed(seed);
+        if (previousSeed !== seed) {
+            reset();
+            previousSeed = seed;
+        }
+    }
+
+    function shuffle() {
+        if (!alphabet) {
+            setCharacters(ORIGINAL);
+        }
+
+        var sourceArray = alphabet.split('');
+        var targetArray = [];
+        var r = randomFromSeed.nextValue();
+        var characterIndex;
+
+        while (sourceArray.length > 0) {
+            r = randomFromSeed.nextValue();
+            characterIndex = Math.floor(r * sourceArray.length);
+            targetArray.push(sourceArray.splice(characterIndex, 1)[0]);
+        }
+        return targetArray.join('');
+    }
+
+    function getShuffled() {
+        if (shuffled) {
+            return shuffled;
+        }
+        shuffled = shuffle();
+        return shuffled;
+    }
+
+    /**
+     * lookup shuffled letter
+     * @param index
+     * @returns {string}
+     */
+    function lookup(index) {
+        var alphabetShuffled = getShuffled();
+        return alphabetShuffled[index];
+    }
+
+    function get () {
+      return alphabet || ORIGINAL;
+    }
+
+    var alphabet_1 = {
+        get: get,
+        characters: characters,
+        seed: setSeed$1,
+        lookup: lookup,
+        shuffled: getShuffled
+    };
+
+    var crypto = typeof window === 'object' && (window.crypto || window.msCrypto); // IE 11 uses window.msCrypto
+
+    var randomByte;
+
+    if (!crypto || !crypto.getRandomValues) {
+        randomByte = function(size) {
+            var bytes = [];
+            for (var i = 0; i < size; i++) {
+                bytes.push(Math.floor(Math.random() * 256));
+            }
+            return bytes;
+        };
+    } else {
+        randomByte = function(size) {
+            return crypto.getRandomValues(new Uint8Array(size));
+        };
+    }
+
+    var randomByteBrowser = randomByte;
+
+    // This file replaces `format.js` in bundlers like webpack or Rollup,
+    // according to `browser` config in `package.json`.
+
+    var format_browser = function (random, alphabet, size) {
+      // We can’t use bytes bigger than the alphabet. To make bytes values closer
+      // to the alphabet, we apply bitmask on them. We look for the closest
+      // `2 ** x - 1` number, which will be bigger than alphabet size. If we have
+      // 30 symbols in the alphabet, we will take 31 (00011111).
+      // We do not use faster Math.clz32, because it is not available in browsers.
+      var mask = (2 << Math.log(alphabet.length - 1) / Math.LN2) - 1;
+      // Bitmask is not a perfect solution (in our example it will pass 31 bytes,
+      // which is bigger than the alphabet). As a result, we will need more bytes,
+      // than ID size, because we will refuse bytes bigger than the alphabet.
+
+      // Every hardware random generator call is costly,
+      // because we need to wait for entropy collection. This is why often it will
+      // be faster to ask for few extra bytes in advance, to avoid additional calls.
+
+      // Here we calculate how many random bytes should we call in advance.
+      // It depends on ID length, mask / alphabet size and magic number 1.6
+      // (which was selected according benchmarks).
+
+      // -~f => Math.ceil(f) if n is float number
+      // -~i => i + 1 if n is integer number
+      var step = -~(1.6 * mask * size / alphabet.length);
+      var id = '';
+
+      while (true) {
+        var bytes = random(step);
+        // Compact alternative for `for (var i = 0; i < step; i++)`
+        var i = step;
+        while (i--) {
+          // If random byte is bigger than alphabet even after bitmask,
+          // we refuse it by `|| ''`.
+          id += alphabet[bytes[i] & mask] || '';
+          // More compact than `id.length + 1 === size`
+          if (id.length === +size) return id
+        }
+      }
+    };
+
+    function generate(number) {
+        var loopCounter = 0;
+        var done;
+
+        var str = '';
+
+        while (!done) {
+            str = str + format_browser(randomByteBrowser, alphabet_1.get(), 1);
+            done = number < (Math.pow(16, loopCounter + 1 ) );
+            loopCounter++;
+        }
+        return str;
+    }
+
+    var generate_1 = generate;
+
+    // Ignore all milliseconds before a certain time to reduce the size of the date entropy without sacrificing uniqueness.
+    // This number should be updated every year or so to keep the generated id short.
+    // To regenerate `new Date() - 0` and bump the version. Always bump the version!
+    var REDUCE_TIME = 1567752802062;
+
+    // don't change unless we change the algos or REDUCE_TIME
+    // must be an integer and less than 16
+    var version = 7;
+
+    // Counter is used when shortid is called multiple times in one second.
+    var counter;
+
+    // Remember the last time shortid was called in case counter is needed.
+    var previousSeconds;
+
+    /**
+     * Generate unique id
+     * Returns string id
+     */
+    function build(clusterWorkerId) {
+        var str = '';
+
+        var seconds = Math.floor((Date.now() - REDUCE_TIME) * 0.001);
+
+        if (seconds === previousSeconds) {
+            counter++;
+        } else {
+            counter = 0;
+            previousSeconds = seconds;
+        }
+
+        str = str + generate_1(version);
+        str = str + generate_1(clusterWorkerId);
+        if (counter > 0) {
+            str = str + generate_1(counter);
+        }
+        str = str + generate_1(seconds);
+        return str;
+    }
+
+    var build_1 = build;
+
+    function isShortId(id) {
+        if (!id || typeof id !== 'string' || id.length < 6 ) {
+            return false;
+        }
+
+        var nonAlphabetic = new RegExp('[^' +
+          alphabet_1.get().replace(/[|\\{}()[\]^$+*?.-]/g, '\\$&') +
+        ']');
+        return !nonAlphabetic.test(id);
+    }
+
+    var isValid = isShortId;
+
+    var lib$1 = createCommonjsModule(function (module) {
+
+
+
+
+
+    // if you are using cluster or multiple servers use this to make each instance
+    // has a unique value for worker
+    // Note: I don't know if this is automatically set when using third
+    // party cluster solutions such as pm2.
+    var clusterWorkerId =  0;
+
+    /**
+     * Set the seed.
+     * Highly recommended if you don't want people to try to figure out your id schema.
+     * exposed as shortid.seed(int)
+     * @param seed Integer value to seed the random alphabet.  ALWAYS USE THE SAME SEED or you might get overlaps.
+     */
+    function seed(seedValue) {
+        alphabet_1.seed(seedValue);
+        return module.exports;
+    }
+
+    /**
+     * Set the cluster worker or machine id
+     * exposed as shortid.worker(int)
+     * @param workerId worker must be positive integer.  Number less than 16 is recommended.
+     * returns shortid module so it can be chained.
+     */
+    function worker(workerId) {
+        clusterWorkerId = workerId;
+        return module.exports;
+    }
+
+    /**
+     *
+     * sets new characters to use in the alphabet
+     * returns the shuffled alphabet
+     */
+    function characters(newCharacters) {
+        if (newCharacters !== undefined) {
+            alphabet_1.characters(newCharacters);
+        }
+
+        return alphabet_1.shuffled();
+    }
+
+    /**
+     * Generate unique id
+     * Returns string id
+     */
+    function generate() {
+      return build_1(clusterWorkerId);
+    }
+
+    // Export all other functions as properties of the generate function
+    module.exports = generate;
+    module.exports.generate = generate;
+    module.exports.seed = seed;
+    module.exports.worker = worker;
+    module.exports.characters = characters;
+    module.exports.isValid = isValid;
+    });
+
+    var shortid = lib$1;
+
     class NotificationsController {
-        start(coreGlue) {
+        constructor() {
+            this.notifications = {};
+        }
+        start(coreGlue, ioc) {
             return __awaiter$1(this, void 0, void 0, function* () {
                 this.logger = coreGlue.logger.subLogger("notifications.controller.web");
                 this.logger.trace("starting the web notifications controller");
-                this.interop = coreGlue.interop;
+                this.bridge = ioc.bridge;
+                this.coreGlue = coreGlue;
+                this.notificationsSettings = ioc.config.notifications;
+                this.buildNotificationFunc = ioc.buildNotification;
                 const api = this.toApi();
+                this.addOperationExecutors();
                 coreGlue.notifications = api;
                 this.logger.trace("notifications are ready");
             });
         }
-        handleBridgeMessage() {
+        handleBridgeMessage(args) {
             return __awaiter$1(this, void 0, void 0, function* () {
+                const operationName = notificationsOperationTypesDecoder.runWithException(args.operation);
+                const operation = operations$3[operationName];
+                if (!operation.execute) {
+                    return;
+                }
+                let operationData = args.data;
+                if (operation.dataDecoder) {
+                    operationData = operation.dataDecoder.runWithException(args.data);
+                }
+                return yield operation.execute(operationData);
             });
         }
         toApi() {
             const api = {
-                raise: this.raise.bind(this)
+                raise: this.raise.bind(this),
+                requestPermission: this.requestPermission.bind(this)
             };
             return Object.freeze(api);
         }
+        requestPermission() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const permissionResult = yield this.bridge.send("notifications", operations$3.requestPermission, undefined);
+                return permissionResult.permissionGranted;
+            });
+        }
         raise(options) {
             return __awaiter$1(this, void 0, void 0, function* () {
-                if (!("Notification" in window)) {
-                    throw new Error("this browser does not support desktop notification");
+                const settings = glue42NotificationOptionsDecoder.runWithException(options);
+                const permissionGranted = yield this.requestPermission();
+                if (!permissionGranted) {
+                    throw new Error("Cannot raise the notification, because the user has declined the permission request");
                 }
-                let permissionPromise;
-                if (Notification.permission === "granted") {
-                    permissionPromise = Promise.resolve("granted");
-                }
-                else if (Notification.permission === "denied") {
-                    permissionPromise = Promise.reject("no permissions from user");
-                }
-                else {
-                    permissionPromise = Notification.requestPermission();
-                }
-                yield permissionPromise;
-                const notification = this.raiseUsingWebApi(options);
-                if (options.clickInterop) {
-                    const interopOptions = options.clickInterop;
-                    notification.onclick = () => {
-                        var _a, _b;
-                        this.interop.invoke(interopOptions.method, (_a = interopOptions === null || interopOptions === void 0 ? void 0 : interopOptions.arguments) !== null && _a !== void 0 ? _a : {}, (_b = interopOptions === null || interopOptions === void 0 ? void 0 : interopOptions.target) !== null && _b !== void 0 ? _b : "best");
-                    };
-                }
+                const id = shortid.generate();
+                yield this.bridge.send("notifications", operations$3.raiseNotification, { settings, id });
+                const notification = this.buildNotificationFunc(options);
+                this.notifications[id] = notification;
                 return notification;
             });
         }
-        raiseUsingWebApi(options) {
-            return new Notification(options.title);
+        addOperationExecutors() {
+            operations$3.notificationShow.execute = this.handleNotificationShow.bind(this);
+            operations$3.notificationClick.execute = this.handleNotificationClick.bind(this);
+        }
+        handleNotificationShow(data) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                if (!data.id) {
+                    return;
+                }
+                const notification = this.notifications[data.id];
+                if (notification && notification.onshow) {
+                    notification.onshow();
+                }
+            });
+        }
+        handleNotificationClick(data) {
+            var _a, _b, _c, _d, _e;
+            return __awaiter$1(this, void 0, void 0, function* () {
+                if (!data.action && ((_a = this.notificationsSettings) === null || _a === void 0 ? void 0 : _a.defaultClick)) {
+                    this.notificationsSettings.defaultClick(this.coreGlue, data.definition);
+                }
+                if (data.action && ((_c = (_b = this.notificationsSettings) === null || _b === void 0 ? void 0 : _b.actionClicks) === null || _c === void 0 ? void 0 : _c.some((actionDef) => actionDef.action === data.action))) {
+                    const foundHandler = (_e = (_d = this.notificationsSettings) === null || _d === void 0 ? void 0 : _d.actionClicks) === null || _e === void 0 ? void 0 : _e.find((actionDef) => actionDef.action === data.action);
+                    foundHandler.handler(this.coreGlue, data.definition);
+                }
+                if (!data.id) {
+                    return;
+                }
+                const notification = this.notifications[data.id];
+                if (notification && notification.onclick) {
+                    notification.onclick();
+                    delete this.notifications[data.id];
+                }
+            });
         }
     }
 
-    const operations$3 = {
+    const operations$4 = {
         getIntents: { name: "getIntents", resultDecoder: wrappedIntentsDecoder },
         findIntent: { name: "findIntent", dataDecoder: wrappedIntentFilterDecoder, resultDecoder: wrappedIntentsDecoder },
         raiseIntent: { name: "raiseIntent", dataDecoder: intentRequestDecoder, resultDecoder: intentResultDecoder }
@@ -2429,7 +2885,7 @@
         handleBridgeMessage(args) {
             return __awaiter$1(this, void 0, void 0, function* () {
                 const operationName = intentsOperationTypesDecoder.runWithException(args.operation);
-                const operation = operations$3[operationName];
+                const operation = operations$4[operationName];
                 if (!operation.execute) {
                     return;
                 }
@@ -2461,13 +2917,13 @@
                 else {
                     data = requestObj;
                 }
-                const result = yield this.bridge.send("intents", operations$3.raiseIntent, data);
+                const result = yield this.bridge.send("intents", operations$4.raiseIntent, data);
                 return result;
             });
         }
         all() {
             return __awaiter$1(this, void 0, void 0, function* () {
-                const result = yield this.bridge.send("intents", operations$3.getIntents, undefined);
+                const result = yield this.bridge.send("intents", operations$4.getIntents, undefined);
                 return result.intents;
             });
         }
@@ -2526,7 +2982,7 @@
                         };
                     }
                 }
-                const result = yield this.bridge.send("intents", operations$3.findIntent, data);
+                const result = yield this.bridge.send("intents", operations$4.findIntent, data);
                 return result.intents;
             });
         }
@@ -2700,6 +3156,52 @@
         }
     }
 
+    const operations$5 = {
+        getEnvironment: { name: "getEnvironment", resultDecoder: anyDecoder },
+        getBase: { name: "getBase", resultDecoder: anyDecoder }
+    };
+
+    class SystemController {
+        start(coreGlue, ioc) {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                this.bridge = ioc.bridge;
+                yield this.setEnvironment();
+            });
+        }
+        handleBridgeMessage() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+            });
+        }
+        setEnvironment() {
+            return __awaiter$1(this, void 0, void 0, function* () {
+                const environment = yield this.bridge.send("system", operations$5.getEnvironment, undefined);
+                const base = yield this.bridge.send("system", operations$5.getBase, undefined);
+                const glue42core = Object.assign({}, window.glue42core, base, { environment });
+                window.glue42core = Object.freeze(glue42core);
+            });
+        }
+    }
+
+    class Notification$1 {
+        constructor(config) {
+            this.onclick = () => { };
+            this.onshow = () => { };
+            this.badge = config.badge;
+            this.body = config.body;
+            this.data = config.data;
+            this.dir = config.dir;
+            this.icon = config.icon;
+            this.image = config.image;
+            this.lang = config.lang;
+            this.renotify = config.renotify;
+            this.requireInteraction = config.requireInteraction;
+            this.silent = config.silent;
+            this.tag = config.tag;
+            this.timestamp = config.timestamp;
+            this.vibrate = config.vibrate;
+        }
+    }
+
     class IoC {
         constructor(coreGlue) {
             this.coreGlue = coreGlue;
@@ -2709,7 +3211,8 @@
                 layouts: this.layoutsController,
                 notifications: this.notificationsController,
                 intents: this.intentsController,
-                channels: this.channelsController
+                channels: this.channelsController,
+                system: this.systemController
             };
         }
         get windowsController() {
@@ -2742,6 +3245,12 @@
             }
             return this._intentsControllerInstance;
         }
+        get systemController() {
+            if (!this._systemControllerInstance) {
+                this._systemControllerInstance = new SystemController();
+            }
+            return this._systemControllerInstance;
+        }
         get channelsController() {
             if (!this._channelsControllerInstance) {
                 this._channelsControllerInstance = new ChannelsController();
@@ -2754,12 +3263,21 @@
             }
             return this._bridgeInstance;
         }
+        get config() {
+            return this._webConfig;
+        }
+        defineConfig(config) {
+            this._webConfig = config;
+        }
         buildWebWindow(id, name) {
             return __awaiter$1(this, void 0, void 0, function* () {
                 const model = new WebWindowModel(id, name, this.bridge);
                 const api = yield model.toApi();
                 return { id, model, api };
             });
+        }
+        buildNotification(config) {
+            return new Notification$1(config);
         }
         buildApplication(app, applicationInstances) {
             return __awaiter$1(this, void 0, void 0, function* () {
@@ -2774,7 +3292,7 @@
         }
     }
 
-    var version = "2.0.9";
+    var version$1 = "2.1.8";
 
     const createFactoryFunction = (coreFactoryFunction) => {
         return (userConfig) => __awaiter$1(void 0, void 0, void 0, function* () {
@@ -2783,10 +3301,11 @@
                 return enterprise(config);
             }
             checkSingleton();
-            const glue = yield PromiseWrap(() => coreFactoryFunction(config, { version }), 30000, "Glue Web initialization timed out, because core didn't resolve");
+            const glue = yield PromiseWrap(() => coreFactoryFunction(config, { version: version$1 }), 30000, "Glue Web initialization timed out, because core didn't resolve");
             const logger = glue.logger.subLogger("web.main.controller");
             const ioc = new IoC(glue);
             yield ioc.bridge.start(ioc.controllers);
+            ioc.defineConfig(config);
             logger.trace("the bridge has been started, initializing all controllers");
             yield Promise.all(Object.values(ioc.controllers).map((controller) => controller.start(glue, ioc)));
             logger.trace("all controllers reported started, starting all additional libraries");
@@ -3811,12 +4330,12 @@
         };
     }
     createRegistry$1.default = createRegistry$1;
-    var lib$1 = createRegistry$1;
+    var lib$2 = createRegistry$1;
 
     var InProcTransport = (function () {
         function InProcTransport(settings, logger) {
             var _this = this;
-            this.registry = lib$1();
+            this.registry = lib$2();
             this.gw = settings.facade;
             this.gw.connect(function (_client, message) {
                 _this.messageHandler(message);
@@ -3871,7 +4390,7 @@
         function SharedWorkerTransport(workerFile, logger) {
             var _this = this;
             this.logger = logger;
-            this.registry = lib$1();
+            this.registry = lib$2();
             this.worker = new SharedWorker(workerFile);
             this.worker.port.onmessage = function (e) {
                 _this.messageHandler(e.data);
@@ -4033,7 +4552,7 @@
         function WS(settings, logger) {
             this.startupTimer = timer("connection");
             this._running = true;
-            this._registry = lib$1();
+            this._registry = lib$2();
             this.wsRequests = [];
             this.settings = settings;
             this.logger = logger;
@@ -4207,59 +4726,59 @@
         return WS;
     }());
 
-    function createCommonjsModule(fn, module) {
+    function createCommonjsModule$1(fn, module) {
     	return module = { exports: {} }, fn(module, module.exports), module.exports;
     }
 
     // Found this seed-based random generator somewhere
     // Based on The Central Randomizer 1.3 (C) 1997 by Paul Houle (houle@msc.cornell.edu)
 
-    var seed = 1;
+    var seed$1 = 1;
 
     /**
      * return a random number based on a seed
      * @param seed
      * @returns {number}
      */
-    function getNextValue() {
-        seed = (seed * 9301 + 49297) % 233280;
-        return seed/(233280.0);
+    function getNextValue$1() {
+        seed$1 = (seed$1 * 9301 + 49297) % 233280;
+        return seed$1/(233280.0);
     }
 
-    function setSeed(_seed_) {
-        seed = _seed_;
+    function setSeed$2(_seed_) {
+        seed$1 = _seed_;
     }
 
-    var randomFromSeed = {
-        nextValue: getNextValue,
-        seed: setSeed
+    var randomFromSeed$1 = {
+        nextValue: getNextValue$1,
+        seed: setSeed$2
     };
 
-    var ORIGINAL = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-';
-    var alphabet;
-    var previousSeed;
+    var ORIGINAL$1 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-';
+    var alphabet$1;
+    var previousSeed$1;
 
-    var shuffled;
+    var shuffled$1;
 
-    function reset() {
-        shuffled = false;
+    function reset$1() {
+        shuffled$1 = false;
     }
 
-    function setCharacters(_alphabet_) {
+    function setCharacters$1(_alphabet_) {
         if (!_alphabet_) {
-            if (alphabet !== ORIGINAL) {
-                alphabet = ORIGINAL;
-                reset();
+            if (alphabet$1 !== ORIGINAL$1) {
+                alphabet$1 = ORIGINAL$1;
+                reset$1();
             }
             return;
         }
 
-        if (_alphabet_ === alphabet) {
+        if (_alphabet_ === alphabet$1) {
             return;
         }
 
-        if (_alphabet_.length !== ORIGINAL.length) {
-            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL.length + ' unique characters. You submitted ' + _alphabet_.length + ' characters: ' + _alphabet_);
+        if (_alphabet_.length !== ORIGINAL$1.length) {
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$1.length + ' unique characters. You submitted ' + _alphabet_.length + ' characters: ' + _alphabet_);
         }
 
         var unique = _alphabet_.split('').filter(function(item, ind, arr){
@@ -4267,50 +4786,50 @@
         });
 
         if (unique.length) {
-            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL.length + ' unique characters. These characters were not unique: ' + unique.join(', '));
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$1.length + ' unique characters. These characters were not unique: ' + unique.join(', '));
         }
 
-        alphabet = _alphabet_;
-        reset();
+        alphabet$1 = _alphabet_;
+        reset$1();
     }
 
-    function characters(_alphabet_) {
-        setCharacters(_alphabet_);
-        return alphabet;
+    function characters$1(_alphabet_) {
+        setCharacters$1(_alphabet_);
+        return alphabet$1;
     }
 
-    function setSeed$1(seed) {
-        randomFromSeed.seed(seed);
-        if (previousSeed !== seed) {
-            reset();
-            previousSeed = seed;
+    function setSeed$1$1(seed) {
+        randomFromSeed$1.seed(seed);
+        if (previousSeed$1 !== seed) {
+            reset$1();
+            previousSeed$1 = seed;
         }
     }
 
-    function shuffle() {
-        if (!alphabet) {
-            setCharacters(ORIGINAL);
+    function shuffle$1() {
+        if (!alphabet$1) {
+            setCharacters$1(ORIGINAL$1);
         }
 
-        var sourceArray = alphabet.split('');
+        var sourceArray = alphabet$1.split('');
         var targetArray = [];
-        var r = randomFromSeed.nextValue();
+        var r = randomFromSeed$1.nextValue();
         var characterIndex;
 
         while (sourceArray.length > 0) {
-            r = randomFromSeed.nextValue();
+            r = randomFromSeed$1.nextValue();
             characterIndex = Math.floor(r * sourceArray.length);
             targetArray.push(sourceArray.splice(characterIndex, 1)[0]);
         }
         return targetArray.join('');
     }
 
-    function getShuffled() {
-        if (shuffled) {
-            return shuffled;
+    function getShuffled$1() {
+        if (shuffled$1) {
+            return shuffled$1;
         }
-        shuffled = shuffle();
-        return shuffled;
+        shuffled$1 = shuffle$1();
+        return shuffled$1;
     }
 
     /**
@@ -4318,30 +4837,30 @@
      * @param index
      * @returns {string}
      */
-    function lookup(index) {
-        var alphabetShuffled = getShuffled();
+    function lookup$1(index) {
+        var alphabetShuffled = getShuffled$1();
         return alphabetShuffled[index];
     }
 
-    var alphabet_1 = {
-        characters: characters,
-        seed: setSeed$1,
-        lookup: lookup,
-        shuffled: getShuffled
+    var alphabet_1$1 = {
+        characters: characters$1,
+        seed: setSeed$1$1,
+        lookup: lookup$1,
+        shuffled: getShuffled$1
     };
 
-    var crypto = typeof window === 'object' && (window.crypto || window.msCrypto); // IE 11 uses window.msCrypto
+    var crypto$1 = typeof window === 'object' && (window.crypto || window.msCrypto); // IE 11 uses window.msCrypto
 
-    function randomByte() {
-        if (!crypto || !crypto.getRandomValues) {
+    function randomByte$1() {
+        if (!crypto$1 || !crypto$1.getRandomValues) {
             return Math.floor(Math.random() * 256) & 0x30;
         }
         var dest = new Uint8Array(1);
-        crypto.getRandomValues(dest);
+        crypto$1.getRandomValues(dest);
         return dest[0] & 0x30;
     }
 
-    var randomByteBrowser = randomByte;
+    var randomByteBrowser$1 = randomByte$1;
 
     function encode(lookup, number) {
         var loopCounter = 0;
@@ -4350,7 +4869,7 @@
         var str = '';
 
         while (!done) {
-            str = str + lookup( ( (number >> (4 * loopCounter)) & 0x0f ) | randomByteBrowser() );
+            str = str + lookup( ( (number >> (4 * loopCounter)) & 0x0f ) | randomByteBrowser$1() );
             done = number < (Math.pow(16, loopCounter + 1 ) );
             loopCounter++;
         }
@@ -4365,7 +4884,7 @@
      * @param id - the shortid-generated id.
      */
     function decode(id) {
-        var characters = alphabet_1.shuffled();
+        var characters = alphabet_1$1.shuffled();
         return {
             version: characters.indexOf(id.substr(0, 1)) & 0x0f,
             worker: characters.indexOf(id.substr(1, 1)) & 0x0f
@@ -4374,12 +4893,12 @@
 
     var decode_1 = decode;
 
-    function isShortId(id) {
+    function isShortId$1(id) {
         if (!id || typeof id !== 'string' || id.length < 6 ) {
             return false;
         }
 
-        var characters = alphabet_1.characters();
+        var characters = alphabet_1$1.characters();
         var len = id.length;
         for(var i = 0; i < len;i++) {
             if (characters.indexOf(id[i]) === -1) {
@@ -4389,9 +4908,9 @@
         return true;
     }
 
-    var isValid = isShortId;
+    var isValid$1 = isShortId$1;
 
-    var lib$1$1 = createCommonjsModule(function (module) {
+    var lib$1$1 = createCommonjsModule$1(function (module) {
 
 
 
@@ -4436,12 +4955,12 @@
             previousSeconds = seconds;
         }
 
-        str = str + encode_1(alphabet_1.lookup, version);
-        str = str + encode_1(alphabet_1.lookup, clusterWorkerId);
+        str = str + encode_1(alphabet_1$1.lookup, version);
+        str = str + encode_1(alphabet_1$1.lookup, clusterWorkerId);
         if (counter > 0) {
-            str = str + encode_1(alphabet_1.lookup, counter);
+            str = str + encode_1(alphabet_1$1.lookup, counter);
         }
-        str = str + encode_1(alphabet_1.lookup, seconds);
+        str = str + encode_1(alphabet_1$1.lookup, seconds);
 
         return str;
     }
@@ -4454,7 +4973,7 @@
      * @param seed Integer value to seed the random alphabet.  ALWAYS USE THE SAME SEED or you might get overlaps.
      */
     function seed(seedValue) {
-        alphabet_1.seed(seedValue);
+        alphabet_1$1.seed(seedValue);
         return module.exports;
     }
 
@@ -4476,10 +4995,10 @@
      */
     function characters(newCharacters) {
         if (newCharacters !== undefined) {
-            alphabet_1.characters(newCharacters);
+            alphabet_1$1.characters(newCharacters);
         }
 
-        return alphabet_1.shuffled();
+        return alphabet_1$1.shuffled();
     }
 
 
@@ -4490,7 +5009,7 @@
     module.exports.worker = worker;
     module.exports.characters = characters;
     module.exports.decode = decode_1;
-    module.exports.isValid = isValid;
+    module.exports.isValid = isValid$1;
     });
     var lib_1 = lib$1$1.generate;
     var lib_2 = lib$1$1.seed;
@@ -4499,7 +5018,7 @@
     var lib_5 = lib$1$1.decode;
     var lib_6 = lib$1$1.isValid;
 
-    var shortid = lib$1$1;
+    var shortid$1 = lib$1$1;
 
     function domainSession (domain, connection, logger, successMessages, errorMessages) {
         if (domain == null) {
@@ -4511,7 +5030,7 @@
         var tryReconnecting = false;
         var _latestOptions;
         var _connectionOn = false;
-        var callbacks = lib$1();
+        var callbacks = lib$2();
         connection.disconnected(handleConnectionDisconnected);
         connection.loggedIn(handleConnectionLoggedIn);
         connection.on("success", function (msg) { return handleSuccessMessage(msg); });
@@ -4638,7 +5157,7 @@
             entry.success(msg);
         }
         function getNextRequestId() {
-            return shortid();
+            return shortid$1();
         }
         function send(msg, tag, options) {
             options = options || {};
@@ -4718,7 +5237,7 @@
             this.datePrefixLen = this.datePrefix.length;
             this.dateMinLen = this.datePrefixLen + 1;
             this.datePrefixFirstChar = this.datePrefix[0];
-            this.registry = lib$1();
+            this.registry = lib$2();
             this._isLoggedIn = false;
             this.shouldTryLogin = true;
             this.initialLogin = true;
@@ -5139,7 +5658,7 @@
             this.parentPingTimeout = 3000;
             this.connectionRequestTimeout = 5000;
             this.defaultTargetString = "*";
-            this.registry = lib$1();
+            this.registry = lib$2();
             this.messages = {
                 connectionAccepted: { name: "connectionAccepted", handle: this.handleConnectionAccepted.bind(this) },
                 connectionRejected: { name: "connectionRejected", handle: this.handleConnectionRejected.bind(this) },
@@ -5149,7 +5668,8 @@
                 platformPing: { name: "platformPing", handle: this.handlePlatformPing.bind(this) },
                 platformUnload: { name: "platformUnload", handle: this.handlePlatformUnload.bind(this) },
                 platformReady: { name: "platformReady", handle: this.handlePlatformReady.bind(this) },
-                clientUnload: { name: "clientUnload", handle: this.handleClientUnload.bind(this) }
+                clientUnload: { name: "clientUnload", handle: this.handleClientUnload.bind(this) },
+                manualUnload: { name: "manualUnload", handle: this.handleManualUnload.bind(this) }
             };
             this.setUpMessageListener();
             this.setUpUnload();
@@ -5259,7 +5779,7 @@
             return PromisePlus$1(function (resolve, reject) {
                 _this.connectionResolve = resolve;
                 _this.connectionReject = reject;
-                _this.myClientId = shortid();
+                _this.myClientId = shortid$1();
                 var bridgeInstanceId = _this.parentType === "workspace" ? window.name.substring(0, window.name.indexOf("#wsp")) : window.name;
                 var request = {
                     glue42core: {
@@ -5449,19 +5969,36 @@
             }
             this.notifyStatusChanged(false, "Gateway unloaded");
         };
+        WebPlatformTransport.prototype.handleManualUnload = function () {
+            var _a, _b;
+            var message = {
+                glue42core: {
+                    type: this.messages.clientUnload.name,
+                    data: {
+                        clientId: this.myClientId,
+                        ownWindowId: (_a = this.identity) === null || _a === void 0 ? void 0 : _a.windowId
+                    }
+                }
+            };
+            if (this.parent) {
+                this.parent.postMessage(message, this.defaultTargetString);
+            }
+            (_b = this.port) === null || _b === void 0 ? void 0 : _b.postMessage(message);
+        };
         WebPlatformTransport.prototype.handleClientUnload = function (event) {
             var data = event.data.glue42core;
-            if (!data.clientId) {
+            var clientId = data === null || data === void 0 ? void 0 : data.data.clientId;
+            if (!clientId) {
                 this.logger.warn("cannot process grand child unload, because the provided id was not valid");
                 return;
             }
-            var foundChild = this.children.find(function (child) { return child.grandChildId === data.clientId; });
+            var foundChild = this.children.find(function (child) { return child.grandChildId === clientId; });
             if (!foundChild) {
                 this.logger.warn("cannot process grand child unload, because this client is unaware of this grandchild");
                 return;
             }
-            this.logger.debug("handling grandchild unload for id: " + data.clientId);
-            this.children = this.children.filter(function (child) { return child.grandChildId !== data.clientId; });
+            this.logger.debug("handling grandchild unload for id: " + clientId);
+            this.children = this.children.filter(function (child) { return child.grandChildId !== clientId; });
         };
         WebPlatformTransport.prototype.handlePlatformPing = function () {
             this.logger.error("cannot handle platform ping, because this is not a platform calls handling component");
@@ -5492,7 +6029,7 @@
             this.logger = logger;
             this.messageHandlers = {};
             this.ids = 1;
-            this.registry = lib$1();
+            this.registry = lib$2();
             this._connected = false;
             this.isTrace = false;
             settings = settings || {};
@@ -5850,7 +6387,7 @@
         }
     };
 
-    var version$1 = "5.4.1";
+    var version$2 = "5.4.6";
 
     function prepareConfig (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -5921,7 +6458,7 @@
                     process: pid,
                     region: region,
                     environment: environment,
-                    api: ext.version || version$1
+                    api: ext.version || version$2
                 },
                 reconnectInterval: reconnectInterval,
                 ws: ws,
@@ -5940,7 +6477,7 @@
             if (glue42gd) {
                 return glue42gd.applicationName;
             }
-            var uid = shortid();
+            var uid = shortid$1();
             if (Utils.isNode()) {
                 if (nodeStartingContext) {
                     return nodeStartingContext.applicationConfig.name;
@@ -6010,7 +6547,7 @@
             connection: connection,
             metrics: (_c = configuration.metrics) !== null && _c !== void 0 ? _c : true,
             contexts: (_d = configuration.contexts) !== null && _d !== void 0 ? _d : true,
-            version: ext.version || version$1,
+            version: ext.version || version$2,
             libs: (_e = ext.libs) !== null && _e !== void 0 ? _e : [],
             customLogger: configuration.customLogger
         };
@@ -7095,7 +7632,7 @@
                                     timeout = additionalOptions.methodResponseTimeoutMs;
                                     additionalOptionsCopy = additionalOptions;
                                     invokePromises = serversMethodMap.map(function (serversMethodPair) {
-                                        var invId = shortid();
+                                        var invId = shortid$1();
                                         var method = serversMethodPair.methods[0];
                                         var server = serversMethodPair.server;
                                         var invokePromise = _this.protocol.client.invoke(invId, method, argumentObj, server, additionalOptionsCopy);
@@ -7376,7 +7913,7 @@
         return ServerSubscription;
     }());
 
-    var Request = (function () {
+    var Request$1 = (function () {
         function Request(protocol, repoMethod, requestContext) {
             this.protocol = protocol;
             this.repoMethod = repoMethod;
@@ -7411,7 +7948,7 @@
                 typeof repoMethod.streamCallbacks.subscriptionRequestHandler === "function")) {
                 return;
             }
-            var request = new Request(this.protocol, repoMethod, requestContext);
+            var request = new Request$1(this.protocol, repoMethod, requestContext);
             repoMethod.streamCallbacks.subscriptionRequestHandler(request);
         };
         ServerStreaming.prototype.handleSubAdded = function (subscription, repoMethod) {
@@ -7874,7 +8411,7 @@
             var _a, _b, _c;
             this.wrapped.user = resolvedIdentity.user;
             this.wrapped.instance = resolvedIdentity.instance;
-            this.wrapped.application = (_a = resolvedIdentity.application) !== null && _a !== void 0 ? _a : shortid();
+            this.wrapped.application = (_a = resolvedIdentity.application) !== null && _a !== void 0 ? _a : shortid$1();
             this.wrapped.applicationName = resolvedIdentity.applicationName;
             this.wrapped.pid = (_c = (_b = resolvedIdentity.pid) !== null && _b !== void 0 ? _b : resolvedIdentity.process) !== null && _c !== void 0 ? _c : Math.floor(Math.random() * 10000000000);
             this.wrapped.machine = resolvedIdentity.machine;
@@ -7898,7 +8435,7 @@
             this.API = API;
             this.servers = {};
             this.methodsCount = {};
-            this.callbacks = lib$1();
+            this.callbacks = lib$2();
             var peerId = this.API.instance.peerId;
             this.myServer = {
                 id: peerId,
@@ -8152,7 +8689,7 @@
             this.repository = repository;
             this.serverRepository = serverRepository;
             this.ERR_URI_SUBSCRIPTION_FAILED = "com.tick42.agm.errors.subscription.failure";
-            this.callbacks = lib$1();
+            this.callbacks = lib$2();
             this.nextStreamId = 0;
             session.on("add-interest", function (msg) {
                 _this.handleAddInterest(msg);
@@ -8414,7 +8951,7 @@
             this.clientRepository = clientRepository;
             this.serverRepository = serverRepository;
             this.logger = logger;
-            this.callbacks = lib$1();
+            this.callbacks = lib$2();
             this.streaming = new ServerStreaming$1(session, clientRepository, serverRepository);
             this.session.on("invoke", function (msg) { return _this.handleInvokeMessage(msg); });
         }
@@ -9413,7 +9950,7 @@
             return Promise.resolve(undefined);
         }
         function setupMetrics() {
-            var _a, _b, _c, _d;
+            var _a, _b, _c, _d, _e;
             var initTimer = timer("metrics");
             var config = internalConfig.metrics;
             var metricsPublishingEnabledFunc = glue42gd === null || glue42gd === void 0 ? void 0 : glue42gd.getMetricsPublishingEnabled;
@@ -9425,8 +9962,8 @@
                 logger: _logger.subLogger("metrics"),
                 canUpdateMetric: canUpdateMetric,
                 system: "Glue42",
-                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : internalConfig.application,
-                instance: (_d = (_c = identity === null || identity === void 0 ? void 0 : identity.instance) !== null && _c !== void 0 ? _c : identity === null || identity === void 0 ? void 0 : identity.windowId) !== null && _d !== void 0 ? _d : shortid(),
+                service: (_c = (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : glue42gd === null || glue42gd === void 0 ? void 0 : glue42gd.applicationName) !== null && _c !== void 0 ? _c : internalConfig.application,
+                instance: (_e = (_d = identity === null || identity === void 0 ? void 0 : identity.instance) !== null && _d !== void 0 ? _d : identity === null || identity === void 0 ? void 0 : identity.windowId) !== null && _e !== void 0 ? _e : shortid$1(),
                 disableAutoAppSystem: disableAutoAppSystem,
                 pagePerformanceMetrics: typeof config !== "boolean" ? config === null || config === void 0 ? void 0 : config.pagePerformanceMetrics : undefined
             });
@@ -9511,7 +10048,7 @@
                 _interop.invoke("T42.ACS.Feedback", feedbackInfo, "best");
             };
             var info = {
-                coreVersion: version$1,
+                coreVersion: version$2,
                 version: internalConfig.version
             };
             glueInitTimer.stop();
@@ -9612,7 +10149,7 @@
     if (typeof window !== "undefined") {
         window.GlueCore = GlueCore;
     }
-    GlueCore.version = version$1;
+    GlueCore.version = version$2;
     GlueCore.default = GlueCore;
 
     const glueWebFactory = createFactoryFunction(GlueCore);
@@ -9621,7 +10158,91 @@
         windowAny.GlueWeb = glueWebFactory;
         delete windowAny.GlueCore;
     }
-    glueWebFactory.version = version;
+    if (!window.glue42gd && !window.glue42core) {
+        window.glue42core = { webStarted: false };
+    }
+    glueWebFactory.version = version$1;
+
+    const Glue42CoreMessageTypes = {
+        connectionRequest: { name: "connectionRequest" },
+        connectionAccepted: { name: "connectionAccepted" },
+        platformPing: { name: "platformPing" },
+        platformReady: { name: "platformReady" },
+        platformUnload: { name: "platformUnload" },
+        clientUnload: { name: "clientUnload" },
+        parentPing: { name: "parentPing" },
+        parentReady: { name: "parentReady" }
+    };
+    const GlueWebPlatformControlName$1 = "T42.Web.Platform.Control";
+    const GlueWebPlatformStreamName$1 = "T42.Web.Platform.Stream";
+    const GlueClientControlName$1 = "T42.Web.Client.Control";
+    const GlueWebPlatformWorkspacesStreamName = "T42.Web.Platform.WSP.Stream";
+    const GlueWorkspaceFrameClientControlName = "T42.Workspaces.Control";
+    const GlueWebIntentsPrefix = "Tick42.FDC3.Intents.";
+    const ChannelContextPrefix = "___channel___";
+    const dbName = "glue42core";
+    const serviceWorkerBroadcastChannelName = "glue42-core-worker";
+    const dbVersion = 1;
+
+    const defaultPlatformConfig = {
+        windows: {
+            windowResponseTimeoutMs: 10000,
+            defaultWindowOpenBounds: {
+                top: 0,
+                left: 0,
+                width: 600,
+                height: 600
+            }
+        },
+        applications: {
+            local: []
+        },
+        layouts: {
+            mode: "idb",
+            local: []
+        },
+        channels: {
+            definitions: []
+        },
+        plugins: {
+            definitions: []
+        },
+        gateway: {
+            logging: {
+                level: "info"
+            }
+        },
+        glue: {},
+        environment: {}
+    };
+    const defaultTargetString = "*";
+    const defaultFetchTimeoutMs = 3000;
+    const defaultOpenerTimeoutMs = 1000;
+
+    const checkIsOpenerGlue = () => {
+        if (!window.opener) {
+            return Promise.resolve(false);
+        }
+        return new Promise((resolve) => {
+            const pingListener = (event) => {
+                var _a;
+                const data = (_a = event.data) === null || _a === void 0 ? void 0 : _a.glue42core;
+                if (!data || data.type !== Glue42CoreMessageTypes.platformReady.name) {
+                    return;
+                }
+                window.removeEventListener("message", pingListener);
+                resolve(true);
+            };
+            window.addEventListener("message", pingListener);
+            const message = {
+                glue42core: {
+                    type: Glue42CoreMessageTypes.platformPing.name
+                }
+            };
+            window.opener.postMessage(message, "*");
+            setTimeout(() => resolve(false), defaultOpenerTimeoutMs);
+        });
+    };
 
     const fallbackToEnterprise = (config) => __awaiter(void 0, void 0, void 0, function* () {
         var _a, _b, _c, _d;
@@ -9639,12 +10260,12 @@
 
     var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
-    function createCommonjsModule$1(fn, basedir, module) {
+    function createCommonjsModule$2(fn, basedir, module) {
     	return module = {
     		path: basedir,
     		exports: {},
     		require: function (path, base) {
-    			return commonjsRequire(path, (base === undefined || base === null) ? module.path : base);
+    			return commonjsRequire$1(path, (base === undefined || base === null) ? module.path : base);
     		}
     	}, fn(module, module.exports), module.exports;
     }
@@ -9664,7 +10285,7 @@
     	return a;
     }
 
-    function commonjsRequire () {
+    function commonjsRequire$1 () {
     	throw new Error('Dynamic requires are not currently supported by @rollup/plugin-commonjs');
     }
 
@@ -11432,26 +12053,6 @@
     d=this;return new Promise(function(e){W4(c.qd);return e.a?e.a(d):e.call(null,d)})},z5.prototype.connect=function(c){return WY(this.qd,c)},z5.Pa=function(){return new Q(null,3,5,R,[op,hu,HK],null)},z5.Ia=!0,z5.Da="gateway-web.core/t_gateway_web$core15330",z5.Ja=function(c){return ce(c,"gateway-web.core/t_gateway_web$core15330")};return new z5(a,b,S)});
     }).call(commonjsGlobal);
 
-    const Glue42CoreMessageTypes = {
-        connectionRequest: { name: "connectionRequest" },
-        connectionAccepted: { name: "connectionAccepted" },
-        platformPing: { name: "platformPing" },
-        platformReady: { name: "platformReady" },
-        platformUnload: { name: "platformUnload" },
-        clientUnload: { name: "clientUnload" },
-        parentPing: { name: "parentPing" },
-        parentReady: { name: "parentReady" }
-    };
-    const GlueWebPlatformControlName$1 = "T42.Web.Platform.Control";
-    const GlueWebPlatformStreamName$1 = "T42.Web.Platform.Stream";
-    const GlueClientControlName$1 = "T42.Web.Client.Control";
-    const GlueWebPlatformWorkspacesStreamName = "T42.Web.Platform.WSP.Stream";
-    const GlueWorkspaceFrameClientControlName = "T42.Workspaces.Control";
-    const GlueWebIntentsPrefix = "Tick42.FDC3.Intents.";
-    const ChannelContextPrefix = "___channel___";
-    const dbName = "glue42core";
-    const dbVersion = 1;
-
     class Gateway {
         constructor() {
             this.configureLogging = window.gateway_web.core.configure_logging;
@@ -11465,7 +12066,7 @@
                         appender: config.logging.appender
                     });
                 }
-                this._gatewayWebInstance = this.create({});
+                this._gatewayWebInstance = this.create({ clients: { inactive_seconds: 0 } });
                 yield this._gatewayWebInstance.start();
             });
         }
@@ -11475,7 +12076,11 @@
                 clientPort.onmessage = (event) => {
                     var _a;
                     const data = (_a = event.data) === null || _a === void 0 ? void 0 : _a.glue42core;
+                    if (clientPort.closed) {
+                        return;
+                    }
                     if (data && data.type === Glue42CoreMessageTypes.clientUnload.name) {
+                        clientPort.closed = true;
                         if (removeFromPlatform) {
                             removeFromPlatform(data.data.clientId);
                         }
@@ -12287,6 +12892,7 @@
 
     const nonNegativeNumberDecoder$1 = number$1().where((num) => num >= 0, "Expected a non-negative number");
     const nonEmptyStringDecoder$1 = string$1().where((s) => s.length > 0, "Expected a non-empty string");
+    const anyDecoder$1 = anyJson$1();
     const windowRelativeDirectionDecoder$1 = oneOf$1(constant$1("top"), constant$1("left"), constant$1("right"), constant$1("bottom"));
     const logLevelDecoder = oneOf$1(constant$1("trace"), constant$1("debug"), constant$1("info"), constant$1("warn"), constant$1("error"));
     const channelMetaDecoder = anyJson$1().where((meta) => typeof meta["color"] === "string" && meta["color"].length > 0, "Expected color to be a non-empty string");
@@ -12317,13 +12923,16 @@
             main: boolean$1()
         })
     });
-    const libDomainDecoder$1 = oneOf$1(constant$1("windows"), constant$1("appManager"), constant$1("layouts"), constant$1("workspaces"), constant$1("intents"));
+    const libDomainDecoder$1 = oneOf$1(constant$1("system"), constant$1("windows"), constant$1("appManager"), constant$1("layouts"), constant$1("workspaces"), constant$1("intents"), constant$1("notifications"));
+    const systemOperationTypesDecoder = oneOf$1(constant$1("getEnvironment"), constant$1("getBase"));
     const windowLayoutItemDecoder$1 = object$1({
         type: constant$1("window"),
         config: object$1({
             appName: nonEmptyStringDecoder$1,
             url: optional$1(nonEmptyStringDecoder$1),
-            title: optional$1(string$1())
+            title: optional$1(string$1()),
+            showCloseButton: optional$1(boolean$1()),
+            allowExtract: optional$1(boolean$1())
         })
     });
     const groupLayoutItemDecoder$1 = object$1({
@@ -12384,7 +12993,7 @@
         name: nonEmptyStringDecoder$1,
         title: optional$1(nonEmptyStringDecoder$1),
         version: optional$1(nonEmptyStringDecoder$1),
-        appId: nonEmptyStringDecoder$1,
+        appId: optional$1(nonEmptyStringDecoder$1),
         manifest: nonEmptyStringDecoder$1,
         manifestType: nonEmptyStringDecoder$1,
         tooltip: optional$1(nonEmptyStringDecoder$1),
@@ -12400,7 +13009,8 @@
     const remoteStoreDecoder = object$1({
         url: nonEmptyStringDecoder$1,
         pollingInterval: optional$1(nonNegativeNumberDecoder$1),
-        requestTimeout: optional$1(nonNegativeNumberDecoder$1)
+        requestTimeout: optional$1(nonNegativeNumberDecoder$1),
+        customHeaders: optional$1(anyJson$1())
     });
     const supplierDecoder = object$1({
         fetch: anyJson$1().andThen((result) => functionCheck(result, "supplier fetch")),
@@ -12417,12 +13027,14 @@
     const pluginDefinitionDecoder = object$1({
         name: nonEmptyStringDecoder$1,
         start: anyJson$1(),
-        config: anyJson$1()
+        config: optional$1(anyJson$1()),
+        critical: optional$1(boolean$1())
     });
     const allApplicationDefinitionsDecoder$1 = oneOf$1(glueCoreAppDefinitionDecoder, fdc3AppDefinitionDecoder$1);
     const appsCollectionDecoder = array$1(allApplicationDefinitionsDecoder$1);
     const applicationsConfigDecoder = object$1({
-        local: optional$1(array$1(allApplicationDefinitionsDecoder$1))
+        local: optional$1(array$1(allApplicationDefinitionsDecoder$1)),
+        remote: optional$1(remoteStoreDecoder)
     });
     const layoutsConfigDecoder = object$1({
         mode: optional$1(oneOf$1(constant$1("idb"), constant$1("session"))),
@@ -12441,9 +13053,31 @@
         }))
     });
     const glueConfigDecoder = anyJson$1();
+    const maximumActiveWorkspacesDecoder = object$1({
+        threshold: number$1().where((num) => num > 1, "Expected a number larger than 1")
+    });
+    const idleWorkspacesDecoder = object$1({
+        idleMSThreshold: number$1().where((num) => num > 100, "Expected a number larger than 100")
+    });
+    const hibernationConfigDecoder = object$1({
+        maximumActiveWorkspaces: optional$1(maximumActiveWorkspacesDecoder),
+        idleWorkspaces: optional$1(idleWorkspacesDecoder)
+    });
+    const loadingConfigDecoder = object$1({
+        delayed: optional$1(object$1({
+            batch: optional$1(number$1()),
+            initialOffsetInterval: optional$1(number$1()),
+            interval: optional$1(number$1())
+        })),
+        defaultStrategy: optional$1(oneOf$1(constant$1("direct"), constant$1("delayed"), constant$1("lazy"))),
+        showDelayedIndicator: optional$1(boolean$1())
+    });
     const workspacesConfigDecoder = object$1({
         src: nonEmptyStringDecoder$1,
-        isFrame: optional$1(boolean$1())
+        hibernation: optional$1(hibernationConfigDecoder),
+        loadingStrategy: optional$1(loadingConfigDecoder),
+        isFrame: optional$1(boolean$1()),
+        frameCache: optional$1(boolean$1())
     });
     const windowsConfigDecoder = object$1({
         windowResponseTimeoutMs: optional$1(nonNegativeNumberDecoder$1),
@@ -12454,15 +13088,21 @@
             height: nonNegativeNumberDecoder$1
         }))
     });
+    const serviceWorkerConfigDecoder = object$1({
+        url: optional$1(nonEmptyStringDecoder$1),
+        registrationPromise: optional$1(anyJson$1())
+    });
     const platformConfigDecoder = object$1({
         windows: optional$1(windowsConfigDecoder),
         applications: optional$1(applicationsConfigDecoder),
         layouts: optional$1(layoutsConfigDecoder),
         channels: optional$1(channelsConfigDecoder),
         plugins: optional$1(pluginsConfigDecoder),
+        serviceWorker: optional$1(serviceWorkerConfigDecoder),
         gateway: optional$1(gatewayConfigDecoder),
         glue: optional$1(glueConfigDecoder),
         workspaces: optional$1(workspacesConfigDecoder),
+        environment: optional$1(anyJson$1()),
         glueFactory: optional$1(anyJson$1().andThen((result) => functionCheck(result, "glueFactory")))
     });
     const windowOpenSettingsDecoder$1 = object$1({
@@ -12491,52 +13131,52 @@
     // Found this seed-based random generator somewhere
     // Based on The Central Randomizer 1.3 (C) 1997 by Paul Houle (houle@msc.cornell.edu)
 
-    var seed$1 = 1;
+    var seed$2 = 1;
 
     /**
      * return a random number based on a seed
      * @param seed
      * @returns {number}
      */
-    function getNextValue$1() {
-        seed$1 = (seed$1 * 9301 + 49297) % 233280;
-        return seed$1/(233280.0);
+    function getNextValue$2() {
+        seed$2 = (seed$2 * 9301 + 49297) % 233280;
+        return seed$2/(233280.0);
     }
 
-    function setSeed$2(_seed_) {
-        seed$1 = _seed_;
+    function setSeed$3(_seed_) {
+        seed$2 = _seed_;
     }
 
-    var randomFromSeed$1 = {
-        nextValue: getNextValue$1,
-        seed: setSeed$2
+    var randomFromSeed$2 = {
+        nextValue: getNextValue$2,
+        seed: setSeed$3
     };
 
-    var ORIGINAL$1 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-';
-    var alphabet$1;
-    var previousSeed$1;
+    var ORIGINAL$2 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-';
+    var alphabet$2;
+    var previousSeed$2;
 
-    var shuffled$1;
+    var shuffled$2;
 
-    function reset$1() {
-        shuffled$1 = false;
+    function reset$2() {
+        shuffled$2 = false;
     }
 
-    function setCharacters$1(_alphabet_) {
+    function setCharacters$2(_alphabet_) {
         if (!_alphabet_) {
-            if (alphabet$1 !== ORIGINAL$1) {
-                alphabet$1 = ORIGINAL$1;
-                reset$1();
+            if (alphabet$2 !== ORIGINAL$2) {
+                alphabet$2 = ORIGINAL$2;
+                reset$2();
             }
             return;
         }
 
-        if (_alphabet_ === alphabet$1) {
+        if (_alphabet_ === alphabet$2) {
             return;
         }
 
-        if (_alphabet_.length !== ORIGINAL$1.length) {
-            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$1.length + ' unique characters. You submitted ' + _alphabet_.length + ' characters: ' + _alphabet_);
+        if (_alphabet_.length !== ORIGINAL$2.length) {
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$2.length + ' unique characters. You submitted ' + _alphabet_.length + ' characters: ' + _alphabet_);
         }
 
         var unique = _alphabet_.split('').filter(function(item, ind, arr){
@@ -12544,50 +13184,50 @@
         });
 
         if (unique.length) {
-            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$1.length + ' unique characters. These characters were not unique: ' + unique.join(', '));
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$2.length + ' unique characters. These characters were not unique: ' + unique.join(', '));
         }
 
-        alphabet$1 = _alphabet_;
-        reset$1();
+        alphabet$2 = _alphabet_;
+        reset$2();
     }
 
-    function characters$1(_alphabet_) {
-        setCharacters$1(_alphabet_);
-        return alphabet$1;
+    function characters$2(_alphabet_) {
+        setCharacters$2(_alphabet_);
+        return alphabet$2;
     }
 
-    function setSeed$3(seed) {
-        randomFromSeed$1.seed(seed);
-        if (previousSeed$1 !== seed) {
-            reset$1();
-            previousSeed$1 = seed;
+    function setSeed$4(seed) {
+        randomFromSeed$2.seed(seed);
+        if (previousSeed$2 !== seed) {
+            reset$2();
+            previousSeed$2 = seed;
         }
     }
 
-    function shuffle$1() {
-        if (!alphabet$1) {
-            setCharacters$1(ORIGINAL$1);
+    function shuffle$2() {
+        if (!alphabet$2) {
+            setCharacters$2(ORIGINAL$2);
         }
 
-        var sourceArray = alphabet$1.split('');
+        var sourceArray = alphabet$2.split('');
         var targetArray = [];
-        var r = randomFromSeed$1.nextValue();
+        var r = randomFromSeed$2.nextValue();
         var characterIndex;
 
         while (sourceArray.length > 0) {
-            r = randomFromSeed$1.nextValue();
+            r = randomFromSeed$2.nextValue();
             characterIndex = Math.floor(r * sourceArray.length);
             targetArray.push(sourceArray.splice(characterIndex, 1)[0]);
         }
         return targetArray.join('');
     }
 
-    function getShuffled$1() {
-        if (shuffled$1) {
-            return shuffled$1;
+    function getShuffled$2() {
+        if (shuffled$2) {
+            return shuffled$2;
         }
-        shuffled$1 = shuffle$1();
-        return shuffled$1;
+        shuffled$2 = shuffle$2();
+        return shuffled$2;
     }
 
     /**
@@ -12595,29 +13235,29 @@
      * @param index
      * @returns {string}
      */
-    function lookup$1(index) {
-        var alphabetShuffled = getShuffled$1();
+    function lookup$2(index) {
+        var alphabetShuffled = getShuffled$2();
         return alphabetShuffled[index];
     }
 
-    function get () {
-      return alphabet$1 || ORIGINAL$1;
+    function get$1 () {
+      return alphabet$2 || ORIGINAL$2;
     }
 
-    var alphabet_1$1 = {
-        get: get,
-        characters: characters$1,
-        seed: setSeed$3,
-        lookup: lookup$1,
-        shuffled: getShuffled$1
+    var alphabet_1$2 = {
+        get: get$1,
+        characters: characters$2,
+        seed: setSeed$4,
+        lookup: lookup$2,
+        shuffled: getShuffled$2
     };
 
-    var crypto$1 = typeof window === 'object' && (window.crypto || window.msCrypto); // IE 11 uses window.msCrypto
+    var crypto$2 = typeof window === 'object' && (window.crypto || window.msCrypto); // IE 11 uses window.msCrypto
 
-    var randomByte$1;
+    var randomByte$2;
 
-    if (!crypto$1 || !crypto$1.getRandomValues) {
-        randomByte$1 = function(size) {
+    if (!crypto$2 || !crypto$2.getRandomValues) {
+        randomByte$2 = function(size) {
             var bytes = [];
             for (var i = 0; i < size; i++) {
                 bytes.push(Math.floor(Math.random() * 256));
@@ -12625,17 +13265,17 @@
             return bytes;
         };
     } else {
-        randomByte$1 = function(size) {
-            return crypto$1.getRandomValues(new Uint8Array(size));
+        randomByte$2 = function(size) {
+            return crypto$2.getRandomValues(new Uint8Array(size));
         };
     }
 
-    var randomByteBrowser$1 = randomByte$1;
+    var randomByteBrowser$2 = randomByte$2;
 
     // This file replaces `format.js` in bundlers like webpack or Rollup,
     // according to `browser` config in `package.json`.
 
-    var format_browser = function (random, alphabet, size) {
+    var format_browser$1 = function (random, alphabet, size) {
       // We can’t use bytes bigger than the alphabet. To make bytes values closer
       // to the alphabet, we apply bitmask on them. We look for the closest
       // `2 ** x - 1` number, which will be bigger than alphabet size. If we have
@@ -12673,78 +13313,78 @@
       }
     };
 
-    function generate(number) {
+    function generate$1(number) {
         var loopCounter = 0;
         var done;
 
         var str = '';
 
         while (!done) {
-            str = str + format_browser(randomByteBrowser$1, alphabet_1$1.get(), 1);
+            str = str + format_browser$1(randomByteBrowser$2, alphabet_1$2.get(), 1);
             done = number < (Math.pow(16, loopCounter + 1 ) );
             loopCounter++;
         }
         return str;
     }
 
-    var generate_1 = generate;
+    var generate_1$1 = generate$1;
 
     // Ignore all milliseconds before a certain time to reduce the size of the date entropy without sacrificing uniqueness.
     // This number should be updated every year or so to keep the generated id short.
     // To regenerate `new Date() - 0` and bump the version. Always bump the version!
-    var REDUCE_TIME = 1567752802062;
+    var REDUCE_TIME$1 = 1567752802062;
 
     // don't change unless we change the algos or REDUCE_TIME
     // must be an integer and less than 16
-    var version$2 = 7;
+    var version$3 = 7;
 
     // Counter is used when shortid is called multiple times in one second.
-    var counter;
+    var counter$1;
 
     // Remember the last time shortid was called in case counter is needed.
-    var previousSeconds;
+    var previousSeconds$1;
 
     /**
      * Generate unique id
      * Returns string id
      */
-    function build(clusterWorkerId) {
+    function build$1(clusterWorkerId) {
         var str = '';
 
-        var seconds = Math.floor((Date.now() - REDUCE_TIME) * 0.001);
+        var seconds = Math.floor((Date.now() - REDUCE_TIME$1) * 0.001);
 
-        if (seconds === previousSeconds) {
-            counter++;
+        if (seconds === previousSeconds$1) {
+            counter$1++;
         } else {
-            counter = 0;
-            previousSeconds = seconds;
+            counter$1 = 0;
+            previousSeconds$1 = seconds;
         }
 
-        str = str + generate_1(version$2);
-        str = str + generate_1(clusterWorkerId);
-        if (counter > 0) {
-            str = str + generate_1(counter);
+        str = str + generate_1$1(version$3);
+        str = str + generate_1$1(clusterWorkerId);
+        if (counter$1 > 0) {
+            str = str + generate_1$1(counter$1);
         }
-        str = str + generate_1(seconds);
+        str = str + generate_1$1(seconds);
         return str;
     }
 
-    var build_1 = build;
+    var build_1$1 = build$1;
 
-    function isShortId$1(id) {
+    function isShortId$2(id) {
         if (!id || typeof id !== 'string' || id.length < 6 ) {
             return false;
         }
 
         var nonAlphabetic = new RegExp('[^' +
-          alphabet_1$1.get().replace(/[|\\{}()[\]^$+*?.-]/g, '\\$&') +
+          alphabet_1$2.get().replace(/[|\\{}()[\]^$+*?.-]/g, '\\$&') +
         ']');
         return !nonAlphabetic.test(id);
     }
 
-    var isValid$1 = isShortId$1;
+    var isValid$2 = isShortId$2;
 
-    var lib$2 = createCommonjsModule$1(function (module) {
+    var lib$3 = createCommonjsModule$2(function (module) {
 
 
 
@@ -12763,7 +13403,7 @@
      * @param seed Integer value to seed the random alphabet.  ALWAYS USE THE SAME SEED or you might get overlaps.
      */
     function seed(seedValue) {
-        alphabet_1$1.seed(seedValue);
+        alphabet_1$2.seed(seedValue);
         return module.exports;
     }
 
@@ -12785,10 +13425,10 @@
      */
     function characters(newCharacters) {
         if (newCharacters !== undefined) {
-            alphabet_1$1.characters(newCharacters);
+            alphabet_1$2.characters(newCharacters);
         }
 
-        return alphabet_1$1.shuffled();
+        return alphabet_1$2.shuffled();
     }
 
     /**
@@ -12796,7 +13436,7 @@
      * Returns string id
      */
     function generate() {
-      return build_1(clusterWorkerId);
+      return build_1$1(clusterWorkerId);
     }
 
     // Export all other functions as properties of the generate function
@@ -12805,13 +13445,14 @@
     module.exports.seed = seed;
     module.exports.worker = worker;
     module.exports.characters = characters;
-    module.exports.isValid = isValid$1;
+    module.exports.isValid = isValid$2;
     });
 
-    var shortid$1 = lib$2;
+    var shortid$2 = lib$3;
 
     class PlatformController {
-        constructor(glueController, windowsController, applicationsController, layoutsController, workspacesController, intentsController, channelsController, portsBridge, stateController) {
+        constructor(systemController, glueController, windowsController, applicationsController, layoutsController, workspacesController, intentsController, channelsController, notificationsController, portsBridge, stateController, serviceWorkerController) {
+            this.systemController = systemController;
             this.glueController = glueController;
             this.windowsController = windowsController;
             this.applicationsController = applicationsController;
@@ -12819,22 +13460,26 @@
             this.workspacesController = workspacesController;
             this.intentsController = intentsController;
             this.channelsController = channelsController;
+            this.notificationsController = notificationsController;
             this.portsBridge = portsBridge;
             this.stateController = stateController;
+            this.serviceWorkerController = serviceWorkerController;
             this.controllers = {
+                system: this.systemController,
                 windows: this.windowsController,
                 appManager: this.applicationsController,
                 layouts: this.layoutsController,
                 workspaces: this.workspacesController,
                 intents: this.intentsController,
-                channels: this.channelsController
+                channels: this.channelsController,
+                notifications: this.notificationsController
             };
         }
         get logger() {
             return logger.get("main.web.platform");
         }
         start(config) {
-            var _a, _b;
+            var _a;
             return __awaiter(this, void 0, void 0, function* () {
                 yield this.portsBridge.start(config.gateway);
                 this.portsBridge.onClientUnloaded(this.handleClientUnloaded.bind(this));
@@ -12846,7 +13491,12 @@
                 this.stateController.start();
                 yield Promise.all(Object.values(this.controllers).map((controller) => controller.start(config)));
                 yield this.glueController.initClientGlue(config === null || config === void 0 ? void 0 : config.glue, config === null || config === void 0 ? void 0 : config.glueFactory, (_a = config === null || config === void 0 ? void 0 : config.workspaces) === null || _a === void 0 ? void 0 : _a.isFrame);
-                (_b = config.plugins) === null || _b === void 0 ? void 0 : _b.definitions.forEach(this.startPlugin.bind(this));
+                yield this.serviceWorkerController.connect(config);
+                if (config.plugins) {
+                    yield Promise.all(config.plugins.definitions.filter((def) => def.critical).map(this.startPlugin.bind(this)));
+                    config.plugins.definitions.filter((def) => !def.critical).map(this.startPlugin.bind(this));
+                }
+                this.serviceWorkerController.notifyReady();
             });
         }
         getClientGlue() {
@@ -12854,12 +13504,24 @@
         }
         startPlugin(definition) {
             var _a;
-            try {
-                definition.start(this.glueController.clientGlue, definition.config);
-            }
-            catch (error) {
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(`Plugin: ${definition.name} threw while initiating: ${JSON.stringify(error.message)}`);
-            }
+            return __awaiter(this, void 0, void 0, function* () {
+                try {
+                    const platformControls = {
+                        control: (args) => this.handlePluginMessage(args, definition.name),
+                        logger: logger.get(definition.name)
+                    };
+                    yield definition.start(this.glueController.clientGlue, definition.config, platformControls);
+                }
+                catch (error) {
+                    const message = `Plugin: ${definition.name} threw while initiating: ${JSON.stringify(error.message)}`;
+                    if (definition.critical) {
+                        throw new Error(message);
+                    }
+                    else {
+                        (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(message);
+                    }
+                }
+            });
         }
         handleControlMessage(args, caller, success, error) {
             var _a, _b;
@@ -12870,7 +13532,7 @@
                 return error(`Cannot execute this platform control, because of domain validation error: ${errString}`);
             }
             const domain = decodeResult.result;
-            args.commandId = shortid$1.generate();
+            args.commandId = shortid$2.generate();
             (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${args.commandId}] received a command for a valid domain: ${domain} from window ${caller.windowId} and interop id ${caller.instance}, forwarding to the appropriate controller`);
             this.controllers[domain]
                 .handleControl(args)
@@ -12884,6 +13546,23 @@
                 const stringError = typeof err === "string" ? err : JSON.stringify(err.message);
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${args.commandId}] this command's execution was rejected, reason: ${stringError}`);
                 error(`The platform rejected operation ${args.operation} for domain: ${domain} with reason: ${stringError}`);
+            });
+        }
+        handlePluginMessage(args, pluginName) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                const decodeResult = libDomainDecoder$1.run(args.domain);
+                if (!decodeResult.ok) {
+                    const errString = JSON.stringify(decodeResult.error);
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`rejecting execution of a command issued by plugin: ${pluginName}, because of a domain validation error: ${errString}`);
+                    throw new Error(`Cannot execute this platform control, because of domain validation error: ${errString}`);
+                }
+                const domain = decodeResult.result;
+                args.commandId = shortid$2.generate();
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${args.commandId}] received a command issued by plugin: ${pluginName} for a valid domain: ${domain}, forwarding to the appropriate controller`);
+                const result = yield this.controllers[domain].handleControl(args);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${args.commandId}] this command was executed successfully, sending the result to the caller.`);
+                return result;
             });
         }
         handleClientUnloaded(client) {
@@ -12901,38 +13580,6 @@
             });
         }
     }
-
-    const defaultPlatformConfig = {
-        windows: {
-            windowResponseTimeoutMs: 10000,
-            defaultWindowOpenBounds: {
-                top: 0,
-                left: 0,
-                width: 600,
-                height: 600
-            }
-        },
-        applications: {
-            local: []
-        },
-        layouts: {
-            mode: "idb",
-            local: []
-        },
-        channels: {
-            definitions: []
-        },
-        plugins: {
-            definitions: []
-        },
-        gateway: {
-            logging: {
-                level: "info"
-            }
-        },
-        glue: {}
-    };
-    const defaultTargetString = "*";
 
     var isMergeableObject = function isMergeableObject(value) {
     	return isNonNullObject(value)
@@ -13066,12 +13713,12 @@
 
     var cjs = deepmerge_1;
 
-    var version$3 = "1.0.8";
+    var version$4 = "1.5.0";
 
     class Platform {
         constructor(controller, config) {
             this.controller = controller;
-            this.checkSingleton(config);
+            this.checkSingleton();
             this.processConfig(config);
         }
         ready() {
@@ -13088,23 +13735,43 @@
             };
         }
         get version() {
-            return version$3;
+            return version$4;
         }
-        checkSingleton(config) {
-            var _a;
+        checkSingleton() {
             const glue42CoreNamespace = window.glue42core;
             if (glue42CoreNamespace && glue42CoreNamespace.platformStarted) {
                 throw new Error("The Glue42 Core Platform has already been started for this application.");
             }
-            window.glue42core = {
-                platformStarted: true,
-                isPlatformFrame: !!((_a = config === null || config === void 0 ? void 0 : config.workspaces) === null || _a === void 0 ? void 0 : _a.isFrame)
-            };
         }
         processConfig(config = {}) {
+            var _a, _b, _c;
             const verifiedConfig = platformConfigDecoder.runWithException(config);
             this.validatePlugins(verifiedConfig);
             this.platformConfig = cjs(defaultPlatformConfig, verifiedConfig);
+            this.transferPromiseObjects(verifiedConfig);
+            const glue42core = {
+                platformStarted: true,
+                isPlatformFrame: !!((_a = config === null || config === void 0 ? void 0 : config.workspaces) === null || _a === void 0 ? void 0 : _a.isFrame),
+                environment: this.platformConfig.environment,
+                workspacesFrameCache: typeof ((_b = config.workspaces) === null || _b === void 0 ? void 0 : _b.frameCache) === "boolean" ? (_c = config.workspaces) === null || _c === void 0 ? void 0 : _c.frameCache : true
+            };
+            window.glue42core = glue42core;
+        }
+        transferPromiseObjects(verifiedConfig) {
+            var _a;
+            if ((_a = verifiedConfig.serviceWorker) === null || _a === void 0 ? void 0 : _a.registrationPromise) {
+                this.platformConfig.serviceWorker.registrationPromise = verifiedConfig.serviceWorker.registrationPromise;
+            }
+            if (verifiedConfig.plugins && verifiedConfig.plugins.definitions.length) {
+                const definitions = verifiedConfig.plugins.definitions;
+                definitions.forEach((def) => {
+                    var _a;
+                    const found = (_a = this.platformConfig.plugins) === null || _a === void 0 ? void 0 : _a.definitions.find((savedDef) => savedDef.name === def.name);
+                    if (found) {
+                        found.config = def.config;
+                    }
+                });
+            }
         }
         validatePlugins(verifiedConfig) {
             var _a;
@@ -14142,12 +14809,12 @@
         };
     }
     createRegistry$2.default = createRegistry$2;
-    var lib$3 = createRegistry$2;
+    var lib$4 = createRegistry$2;
 
     var InProcTransport$1 = (function () {
         function InProcTransport(settings, logger) {
             var _this = this;
-            this.registry = lib$3();
+            this.registry = lib$4();
             this.gw = settings.facade;
             this.gw.connect(function (_client, message) {
                 _this.messageHandler(message);
@@ -14202,7 +14869,7 @@
         function SharedWorkerTransport(workerFile, logger) {
             var _this = this;
             this.logger = logger;
-            this.registry = lib$3();
+            this.registry = lib$4();
             this.worker = new SharedWorker(workerFile);
             this.worker.port.onmessage = function (e) {
                 _this.messageHandler(e.data);
@@ -14364,7 +15031,7 @@
         function WS(settings, logger) {
             this.startupTimer = timer$1("connection");
             this._running = true;
-            this._registry = lib$3();
+            this._registry = lib$4();
             this.wsRequests = [];
             this.settings = settings;
             this.logger = logger;
@@ -14538,59 +15205,59 @@
         return WS;
     }());
 
-    function createCommonjsModule$2(fn, module) {
+    function createCommonjsModule$3(fn, module) {
     	return module = { exports: {} }, fn(module, module.exports), module.exports;
     }
 
     // Found this seed-based random generator somewhere
     // Based on The Central Randomizer 1.3 (C) 1997 by Paul Houle (houle@msc.cornell.edu)
 
-    var seed$2 = 1;
+    var seed$3 = 1;
 
     /**
      * return a random number based on a seed
      * @param seed
      * @returns {number}
      */
-    function getNextValue$2() {
-        seed$2 = (seed$2 * 9301 + 49297) % 233280;
-        return seed$2/(233280.0);
+    function getNextValue$3() {
+        seed$3 = (seed$3 * 9301 + 49297) % 233280;
+        return seed$3/(233280.0);
     }
 
-    function setSeed$4(_seed_) {
-        seed$2 = _seed_;
+    function setSeed$5(_seed_) {
+        seed$3 = _seed_;
     }
 
-    var randomFromSeed$2 = {
-        nextValue: getNextValue$2,
-        seed: setSeed$4
+    var randomFromSeed$3 = {
+        nextValue: getNextValue$3,
+        seed: setSeed$5
     };
 
-    var ORIGINAL$2 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-';
-    var alphabet$2;
-    var previousSeed$2;
+    var ORIGINAL$3 = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-';
+    var alphabet$3;
+    var previousSeed$3;
 
-    var shuffled$2;
+    var shuffled$3;
 
-    function reset$2() {
-        shuffled$2 = false;
+    function reset$3() {
+        shuffled$3 = false;
     }
 
-    function setCharacters$2(_alphabet_) {
+    function setCharacters$3(_alphabet_) {
         if (!_alphabet_) {
-            if (alphabet$2 !== ORIGINAL$2) {
-                alphabet$2 = ORIGINAL$2;
-                reset$2();
+            if (alphabet$3 !== ORIGINAL$3) {
+                alphabet$3 = ORIGINAL$3;
+                reset$3();
             }
             return;
         }
 
-        if (_alphabet_ === alphabet$2) {
+        if (_alphabet_ === alphabet$3) {
             return;
         }
 
-        if (_alphabet_.length !== ORIGINAL$2.length) {
-            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$2.length + ' unique characters. You submitted ' + _alphabet_.length + ' characters: ' + _alphabet_);
+        if (_alphabet_.length !== ORIGINAL$3.length) {
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$3.length + ' unique characters. You submitted ' + _alphabet_.length + ' characters: ' + _alphabet_);
         }
 
         var unique = _alphabet_.split('').filter(function(item, ind, arr){
@@ -14598,50 +15265,50 @@
         });
 
         if (unique.length) {
-            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$2.length + ' unique characters. These characters were not unique: ' + unique.join(', '));
+            throw new Error('Custom alphabet for shortid must be ' + ORIGINAL$3.length + ' unique characters. These characters were not unique: ' + unique.join(', '));
         }
 
-        alphabet$2 = _alphabet_;
-        reset$2();
+        alphabet$3 = _alphabet_;
+        reset$3();
     }
 
-    function characters$2(_alphabet_) {
-        setCharacters$2(_alphabet_);
-        return alphabet$2;
+    function characters$3(_alphabet_) {
+        setCharacters$3(_alphabet_);
+        return alphabet$3;
     }
 
-    function setSeed$1$1(seed) {
-        randomFromSeed$2.seed(seed);
-        if (previousSeed$2 !== seed) {
-            reset$2();
-            previousSeed$2 = seed;
+    function setSeed$1$2(seed) {
+        randomFromSeed$3.seed(seed);
+        if (previousSeed$3 !== seed) {
+            reset$3();
+            previousSeed$3 = seed;
         }
     }
 
-    function shuffle$2() {
-        if (!alphabet$2) {
-            setCharacters$2(ORIGINAL$2);
+    function shuffle$3() {
+        if (!alphabet$3) {
+            setCharacters$3(ORIGINAL$3);
         }
 
-        var sourceArray = alphabet$2.split('');
+        var sourceArray = alphabet$3.split('');
         var targetArray = [];
-        var r = randomFromSeed$2.nextValue();
+        var r = randomFromSeed$3.nextValue();
         var characterIndex;
 
         while (sourceArray.length > 0) {
-            r = randomFromSeed$2.nextValue();
+            r = randomFromSeed$3.nextValue();
             characterIndex = Math.floor(r * sourceArray.length);
             targetArray.push(sourceArray.splice(characterIndex, 1)[0]);
         }
         return targetArray.join('');
     }
 
-    function getShuffled$2() {
-        if (shuffled$2) {
-            return shuffled$2;
+    function getShuffled$3() {
+        if (shuffled$3) {
+            return shuffled$3;
         }
-        shuffled$2 = shuffle$2();
-        return shuffled$2;
+        shuffled$3 = shuffle$3();
+        return shuffled$3;
     }
 
     /**
@@ -14649,30 +15316,30 @@
      * @param index
      * @returns {string}
      */
-    function lookup$2(index) {
-        var alphabetShuffled = getShuffled$2();
+    function lookup$3(index) {
+        var alphabetShuffled = getShuffled$3();
         return alphabetShuffled[index];
     }
 
-    var alphabet_1$2 = {
-        characters: characters$2,
-        seed: setSeed$1$1,
-        lookup: lookup$2,
-        shuffled: getShuffled$2
+    var alphabet_1$3 = {
+        characters: characters$3,
+        seed: setSeed$1$2,
+        lookup: lookup$3,
+        shuffled: getShuffled$3
     };
 
-    var crypto$2 = typeof window === 'object' && (window.crypto || window.msCrypto); // IE 11 uses window.msCrypto
+    var crypto$3 = typeof window === 'object' && (window.crypto || window.msCrypto); // IE 11 uses window.msCrypto
 
-    function randomByte$2() {
-        if (!crypto$2 || !crypto$2.getRandomValues) {
+    function randomByte$3() {
+        if (!crypto$3 || !crypto$3.getRandomValues) {
             return Math.floor(Math.random() * 256) & 0x30;
         }
         var dest = new Uint8Array(1);
-        crypto$2.getRandomValues(dest);
+        crypto$3.getRandomValues(dest);
         return dest[0] & 0x30;
     }
 
-    var randomByteBrowser$2 = randomByte$2;
+    var randomByteBrowser$3 = randomByte$3;
 
     function encode$1(lookup, number) {
         var loopCounter = 0;
@@ -14681,7 +15348,7 @@
         var str = '';
 
         while (!done) {
-            str = str + lookup( ( (number >> (4 * loopCounter)) & 0x0f ) | randomByteBrowser$2() );
+            str = str + lookup( ( (number >> (4 * loopCounter)) & 0x0f ) | randomByteBrowser$3() );
             done = number < (Math.pow(16, loopCounter + 1 ) );
             loopCounter++;
         }
@@ -14696,7 +15363,7 @@
      * @param id - the shortid-generated id.
      */
     function decode$1(id) {
-        var characters = alphabet_1$2.shuffled();
+        var characters = alphabet_1$3.shuffled();
         return {
             version: characters.indexOf(id.substr(0, 1)) & 0x0f,
             worker: characters.indexOf(id.substr(1, 1)) & 0x0f
@@ -14705,12 +15372,12 @@
 
     var decode_1$1 = decode$1;
 
-    function isShortId$2(id) {
+    function isShortId$3(id) {
         if (!id || typeof id !== 'string' || id.length < 6 ) {
             return false;
         }
 
-        var characters = alphabet_1$2.characters();
+        var characters = alphabet_1$3.characters();
         var len = id.length;
         for(var i = 0; i < len;i++) {
             if (characters.indexOf(id[i]) === -1) {
@@ -14720,9 +15387,9 @@
         return true;
     }
 
-    var isValid$2 = isShortId$2;
+    var isValid$3 = isShortId$3;
 
-    var lib$1$2 = createCommonjsModule$2(function (module) {
+    var lib$1$2 = createCommonjsModule$3(function (module) {
 
 
 
@@ -14767,12 +15434,12 @@
             previousSeconds = seconds;
         }
 
-        str = str + encode_1$1(alphabet_1$2.lookup, version);
-        str = str + encode_1$1(alphabet_1$2.lookup, clusterWorkerId);
+        str = str + encode_1$1(alphabet_1$3.lookup, version);
+        str = str + encode_1$1(alphabet_1$3.lookup, clusterWorkerId);
         if (counter > 0) {
-            str = str + encode_1$1(alphabet_1$2.lookup, counter);
+            str = str + encode_1$1(alphabet_1$3.lookup, counter);
         }
-        str = str + encode_1$1(alphabet_1$2.lookup, seconds);
+        str = str + encode_1$1(alphabet_1$3.lookup, seconds);
 
         return str;
     }
@@ -14785,7 +15452,7 @@
      * @param seed Integer value to seed the random alphabet.  ALWAYS USE THE SAME SEED or you might get overlaps.
      */
     function seed(seedValue) {
-        alphabet_1$2.seed(seedValue);
+        alphabet_1$3.seed(seedValue);
         return module.exports;
     }
 
@@ -14807,10 +15474,10 @@
      */
     function characters(newCharacters) {
         if (newCharacters !== undefined) {
-            alphabet_1$2.characters(newCharacters);
+            alphabet_1$3.characters(newCharacters);
         }
 
-        return alphabet_1$2.shuffled();
+        return alphabet_1$3.shuffled();
     }
 
 
@@ -14821,7 +15488,7 @@
     module.exports.worker = worker;
     module.exports.characters = characters;
     module.exports.decode = decode_1$1;
-    module.exports.isValid = isValid$2;
+    module.exports.isValid = isValid$3;
     });
     var lib_1$1 = lib$1$2.generate;
     var lib_2$1 = lib$1$2.seed;
@@ -14830,7 +15497,7 @@
     var lib_5$1 = lib$1$2.decode;
     var lib_6$1 = lib$1$2.isValid;
 
-    var shortid$2 = lib$1$2;
+    var shortid$3 = lib$1$2;
 
     function domainSession$1 (domain, connection, logger, successMessages, errorMessages) {
         if (domain == null) {
@@ -14842,7 +15509,7 @@
         var tryReconnecting = false;
         var _latestOptions;
         var _connectionOn = false;
-        var callbacks = lib$3();
+        var callbacks = lib$4();
         connection.disconnected(handleConnectionDisconnected);
         connection.loggedIn(handleConnectionLoggedIn);
         connection.on("success", function (msg) { return handleSuccessMessage(msg); });
@@ -14969,7 +15636,7 @@
             entry.success(msg);
         }
         function getNextRequestId() {
-            return shortid$2();
+            return shortid$3();
         }
         function send(msg, tag, options) {
             options = options || {};
@@ -15049,7 +15716,7 @@
             this.datePrefixLen = this.datePrefix.length;
             this.dateMinLen = this.datePrefixLen + 1;
             this.datePrefixFirstChar = this.datePrefix[0];
-            this.registry = lib$3();
+            this.registry = lib$4();
             this._isLoggedIn = false;
             this.shouldTryLogin = true;
             this.initialLogin = true;
@@ -15470,7 +16137,7 @@
             this.parentPingTimeout = 3000;
             this.connectionRequestTimeout = 5000;
             this.defaultTargetString = "*";
-            this.registry = lib$3();
+            this.registry = lib$4();
             this.messages = {
                 connectionAccepted: { name: "connectionAccepted", handle: this.handleConnectionAccepted.bind(this) },
                 connectionRejected: { name: "connectionRejected", handle: this.handleConnectionRejected.bind(this) },
@@ -15480,7 +16147,8 @@
                 platformPing: { name: "platformPing", handle: this.handlePlatformPing.bind(this) },
                 platformUnload: { name: "platformUnload", handle: this.handlePlatformUnload.bind(this) },
                 platformReady: { name: "platformReady", handle: this.handlePlatformReady.bind(this) },
-                clientUnload: { name: "clientUnload", handle: this.handleClientUnload.bind(this) }
+                clientUnload: { name: "clientUnload", handle: this.handleClientUnload.bind(this) },
+                manualUnload: { name: "manualUnload", handle: this.handleManualUnload.bind(this) }
             };
             this.setUpMessageListener();
             this.setUpUnload();
@@ -15590,7 +16258,7 @@
             return PromisePlus$2(function (resolve, reject) {
                 _this.connectionResolve = resolve;
                 _this.connectionReject = reject;
-                _this.myClientId = shortid$2();
+                _this.myClientId = shortid$3();
                 var bridgeInstanceId = _this.parentType === "workspace" ? window.name.substring(0, window.name.indexOf("#wsp")) : window.name;
                 var request = {
                     glue42core: {
@@ -15780,19 +16448,36 @@
             }
             this.notifyStatusChanged(false, "Gateway unloaded");
         };
+        WebPlatformTransport.prototype.handleManualUnload = function () {
+            var _a, _b;
+            var message = {
+                glue42core: {
+                    type: this.messages.clientUnload.name,
+                    data: {
+                        clientId: this.myClientId,
+                        ownWindowId: (_a = this.identity) === null || _a === void 0 ? void 0 : _a.windowId
+                    }
+                }
+            };
+            if (this.parent) {
+                this.parent.postMessage(message, this.defaultTargetString);
+            }
+            (_b = this.port) === null || _b === void 0 ? void 0 : _b.postMessage(message);
+        };
         WebPlatformTransport.prototype.handleClientUnload = function (event) {
             var data = event.data.glue42core;
-            if (!data.clientId) {
+            var clientId = data === null || data === void 0 ? void 0 : data.data.clientId;
+            if (!clientId) {
                 this.logger.warn("cannot process grand child unload, because the provided id was not valid");
                 return;
             }
-            var foundChild = this.children.find(function (child) { return child.grandChildId === data.clientId; });
+            var foundChild = this.children.find(function (child) { return child.grandChildId === clientId; });
             if (!foundChild) {
                 this.logger.warn("cannot process grand child unload, because this client is unaware of this grandchild");
                 return;
             }
-            this.logger.debug("handling grandchild unload for id: " + data.clientId);
-            this.children = this.children.filter(function (child) { return child.grandChildId !== data.clientId; });
+            this.logger.debug("handling grandchild unload for id: " + clientId);
+            this.children = this.children.filter(function (child) { return child.grandChildId !== clientId; });
         };
         WebPlatformTransport.prototype.handlePlatformPing = function () {
             this.logger.error("cannot handle platform ping, because this is not a platform calls handling component");
@@ -15823,7 +16508,7 @@
             this.logger = logger;
             this.messageHandlers = {};
             this.ids = 1;
-            this.registry = lib$3();
+            this.registry = lib$4();
             this._connected = false;
             this.isTrace = false;
             settings = settings || {};
@@ -16181,7 +16866,7 @@
         }
     };
 
-    var version$4 = "5.4.1";
+    var version$5 = "5.4.6";
 
     function prepareConfig$1 (configuration, ext, glue42gd) {
         var _a, _b, _c, _d, _e;
@@ -16253,7 +16938,7 @@
                     process: pid,
                     region: region,
                     environment: environment,
-                    api: ext.version || version$4
+                    api: ext.version || version$5
                 },
                 reconnectInterval: reconnectInterval,
                 ws: ws,
@@ -16272,7 +16957,7 @@
             if (glue42gd) {
                 return glue42gd.applicationName;
             }
-            var uid = shortid$2();
+            var uid = shortid$3();
             if (Utils$1.isNode()) {
                 if (nodeStartingContext) {
                     return nodeStartingContext.applicationConfig.name;
@@ -16342,7 +17027,7 @@
             connection: connection,
             metrics: (_c = configuration.metrics) !== null && _c !== void 0 ? _c : true,
             contexts: (_d = configuration.contexts) !== null && _d !== void 0 ? _d : true,
-            version: ext.version || version$4,
+            version: ext.version || version$5,
             libs: (_e = ext.libs) !== null && _e !== void 0 ? _e : [],
             customLogger: configuration.customLogger
         };
@@ -17434,7 +18119,7 @@
                                     timeout = additionalOptions.methodResponseTimeoutMs;
                                     additionalOptionsCopy = additionalOptions;
                                     invokePromises = serversMethodMap.map(function (serversMethodPair) {
-                                        var invId = shortid$2();
+                                        var invId = shortid$3();
                                         var method = serversMethodPair.methods[0];
                                         var server = serversMethodPair.server;
                                         var invokePromise = _this.protocol.client.invoke(invId, method, argumentObj, server, additionalOptionsCopy);
@@ -17715,7 +18400,7 @@
         return ServerSubscription;
     }());
 
-    var Request$1 = (function () {
+    var Request$2 = (function () {
         function Request(protocol, repoMethod, requestContext) {
             this.protocol = protocol;
             this.repoMethod = repoMethod;
@@ -17750,7 +18435,7 @@
                 typeof repoMethod.streamCallbacks.subscriptionRequestHandler === "function")) {
                 return;
             }
-            var request = new Request$1(this.protocol, repoMethod, requestContext);
+            var request = new Request$2(this.protocol, repoMethod, requestContext);
             repoMethod.streamCallbacks.subscriptionRequestHandler(request);
         };
         ServerStreaming.prototype.handleSubAdded = function (subscription, repoMethod) {
@@ -18213,7 +18898,7 @@
             var _a, _b, _c;
             this.wrapped.user = resolvedIdentity.user;
             this.wrapped.instance = resolvedIdentity.instance;
-            this.wrapped.application = (_a = resolvedIdentity.application) !== null && _a !== void 0 ? _a : shortid$2();
+            this.wrapped.application = (_a = resolvedIdentity.application) !== null && _a !== void 0 ? _a : shortid$3();
             this.wrapped.applicationName = resolvedIdentity.applicationName;
             this.wrapped.pid = (_c = (_b = resolvedIdentity.pid) !== null && _b !== void 0 ? _b : resolvedIdentity.process) !== null && _c !== void 0 ? _c : Math.floor(Math.random() * 10000000000);
             this.wrapped.machine = resolvedIdentity.machine;
@@ -18237,7 +18922,7 @@
             this.API = API;
             this.servers = {};
             this.methodsCount = {};
-            this.callbacks = lib$3();
+            this.callbacks = lib$4();
             var peerId = this.API.instance.peerId;
             this.myServer = {
                 id: peerId,
@@ -18491,7 +19176,7 @@
             this.repository = repository;
             this.serverRepository = serverRepository;
             this.ERR_URI_SUBSCRIPTION_FAILED = "com.tick42.agm.errors.subscription.failure";
-            this.callbacks = lib$3();
+            this.callbacks = lib$4();
             this.nextStreamId = 0;
             session.on("add-interest", function (msg) {
                 _this.handleAddInterest(msg);
@@ -18753,7 +19438,7 @@
             this.clientRepository = clientRepository;
             this.serverRepository = serverRepository;
             this.logger = logger;
-            this.callbacks = lib$3();
+            this.callbacks = lib$4();
             this.streaming = new ServerStreaming$1$1(session, clientRepository, serverRepository);
             this.session.on("invoke", function (msg) { return _this.handleInvokeMessage(msg); });
         }
@@ -19752,7 +20437,7 @@
             return Promise.resolve(undefined);
         }
         function setupMetrics() {
-            var _a, _b, _c, _d;
+            var _a, _b, _c, _d, _e;
             var initTimer = timer$1("metrics");
             var config = internalConfig.metrics;
             var metricsPublishingEnabledFunc = glue42gd === null || glue42gd === void 0 ? void 0 : glue42gd.getMetricsPublishingEnabled;
@@ -19764,8 +20449,8 @@
                 logger: _logger.subLogger("metrics"),
                 canUpdateMetric: canUpdateMetric,
                 system: "Glue42",
-                service: (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : internalConfig.application,
-                instance: (_d = (_c = identity === null || identity === void 0 ? void 0 : identity.instance) !== null && _c !== void 0 ? _c : identity === null || identity === void 0 ? void 0 : identity.windowId) !== null && _d !== void 0 ? _d : shortid$2(),
+                service: (_c = (_b = identity === null || identity === void 0 ? void 0 : identity.service) !== null && _b !== void 0 ? _b : glue42gd === null || glue42gd === void 0 ? void 0 : glue42gd.applicationName) !== null && _c !== void 0 ? _c : internalConfig.application,
+                instance: (_e = (_d = identity === null || identity === void 0 ? void 0 : identity.instance) !== null && _d !== void 0 ? _d : identity === null || identity === void 0 ? void 0 : identity.windowId) !== null && _e !== void 0 ? _e : shortid$3(),
                 disableAutoAppSystem: disableAutoAppSystem,
                 pagePerformanceMetrics: typeof config !== "boolean" ? config === null || config === void 0 ? void 0 : config.pagePerformanceMetrics : undefined
             });
@@ -19850,7 +20535,7 @@
                 _interop.invoke("T42.ACS.Feedback", feedbackInfo, "best");
             };
             var info = {
-                coreVersion: version$4,
+                coreVersion: version$5,
                 version: internalConfig.version
             };
             glueInitTimer.stop();
@@ -19951,7 +20636,7 @@
     if (typeof window !== "undefined") {
         window.GlueCore = GlueCore$1;
     }
-    GlueCore$1.version = version$4;
+    GlueCore$1.version = version$5;
     GlueCore$1.default = GlueCore$1;
 
     const PromiseWrap$1 = (promise, timeoutMilliseconds, timeoutMessage) => {
@@ -20591,7 +21276,7 @@
     	return value;
     };
 
-    var callBind = createCommonjsModule$1(function (module) {
+    var callBind = createCommonjsModule$2(function (module) {
 
 
 
@@ -21055,7 +21740,7 @@
     	return value;
     };
 
-    var callBind$1 = createCommonjsModule$1(function (module) {
+    var callBind$1 = createCommonjsModule$2(function (module) {
 
 
 
@@ -21269,7 +21954,7 @@
     	return hasToStringTag$5 && Symbol.toStringTag in value ? tryBooleanObject(value) : $toString$1(value) === boolClass;
     };
 
-    var isSymbol = createCommonjsModule$1(function (module) {
+    var isSymbol = createCommonjsModule$2(function (module) {
 
     var toStr = Object.prototype.toString;
     var hasSymbols$1 = hasSymbols();
@@ -21306,7 +21991,7 @@
     }
     });
 
-    var isBigint = createCommonjsModule$1(function (module) {
+    var isBigint = createCommonjsModule$2(function (module) {
 
     if (typeof BigInt === 'function') {
     	var bigIntValueOf = BigInt.prototype.valueOf;
@@ -21490,7 +22175,7 @@
     	return false;
     };
 
-    var isWeakset = createCommonjsModule$1(function (module) {
+    var isWeakset = createCommonjsModule$2(function (module) {
 
     var $WeakMap = typeof WeakMap === 'function' && WeakMap.prototype ? WeakMap : null;
     var $WeakSet = typeof WeakSet === 'function' && WeakSet.prototype ? WeakSet : null;
@@ -21552,7 +22237,7 @@
     	return false;
     };
 
-    var esGetIterator = createCommonjsModule$1(function (module) {
+    var esGetIterator = createCommonjsModule$2(function (module) {
 
     /* eslint global-require: 0 */
     // the code is structured this way so that bundlers can
@@ -23724,7 +24409,7 @@
         registerClientWindow(isWorkspaceFrame) {
             if (isWorkspaceFrame) {
                 const platformFrame = this.sessionStorage.getPlatformFrame();
-                this._platformClientWindowId = platformFrame ? platformFrame.windowId : shortid$1.generate();
+                this._platformClientWindowId = platformFrame ? platformFrame.windowId : shortid$2.generate();
                 if (!platformFrame) {
                     const platformFrameData = { windowId: this._platformClientWindowId, active: true, isPlatform: true };
                     this.sessionStorage.saveFrameData(platformFrameData);
@@ -23732,7 +24417,7 @@
                 return;
             }
             const platformWindowData = this.sessionStorage.getWindowDataByName("Platform");
-            this._platformClientWindowId = platformWindowData ? platformWindowData.windowId : shortid$1.generate();
+            this._platformClientWindowId = platformWindowData ? platformWindowData.windowId : shortid$2.generate();
             if (!platformWindowData) {
                 this.sessionStorage.saveWindowData({ name: "Platform", windowId: this.platformWindowId });
             }
@@ -23886,14 +24571,14 @@
         };
     }
     createRegistry$3.default = createRegistry$3;
-    var lib$4 = createRegistry$3;
+    var lib$5 = createRegistry$3;
 
     class PortsBridge {
         constructor(gateway, sessionStorage, ioc) {
             this.gateway = gateway;
             this.sessionStorage = sessionStorage;
             this.ioc = ioc;
-            this.registry = lib$4();
+            this.registry = lib$5();
             this.clients = {};
             this.unLoadStarted = false;
         }
@@ -24000,7 +24685,7 @@
         }
     }
 
-    const windowOperationDecoder = oneOf$1(constant$1("openWindow"), constant$1("windowHello"), constant$1("getUrl"), constant$1("getTitle"), constant$1("setTitle"), constant$1("moveResize"), constant$1("focus"), constant$1("close"), constant$1("getBounds"), constant$1("registerWorkspaceWindow"), constant$1("unregisterWorkspaceWindow"));
+    const windowOperationDecoder = oneOf$1(constant$1("openWindow"), constant$1("windowHello"), constant$1("getUrl"), constant$1("getTitle"), constant$1("setTitle"), constant$1("moveResize"), constant$1("focus"), constant$1("close"), constant$1("getBounds"), constant$1("getFrameBounds"), constant$1("registerWorkspaceWindow"), constant$1("unregisterWorkspaceWindow"));
     const openWindowConfigDecoder$1 = object$1({
         name: nonEmptyStringDecoder$1,
         url: nonEmptyStringDecoder$1,
@@ -24015,6 +24700,14 @@
     });
     const windowBoundsResultDecoder$1 = object$1({
         windowId: nonEmptyStringDecoder$1,
+        bounds: object$1({
+            top: number$1(),
+            left: number$1(),
+            width: nonNegativeNumberDecoder$1,
+            height: nonNegativeNumberDecoder$1
+        })
+    });
+    const frameWindowBoundsResultDecoder$1 = object$1({
         bounds: object$1({
             top: number$1(),
             left: number$1(),
@@ -24039,7 +24732,7 @@
         title: string$1()
     });
 
-    const workspacesOperationDecoder = oneOf$1(constant$1("isWindowInWorkspace"), constant$1("createWorkspace"), constant$1("getAllFramesSummaries"), constant$1("getFrameSummary"), constant$1("getAllWorkspacesSummaries"), constant$1("getWorkspaceSnapshot"), constant$1("getAllLayoutsSummaries"), constant$1("openWorkspace"), constant$1("deleteLayout"), constant$1("saveLayout"), constant$1("importLayout"), constant$1("exportAllLayouts"), constant$1("restoreItem"), constant$1("maximizeItem"), constant$1("focusItem"), constant$1("closeItem"), constant$1("resizeItem"), constant$1("moveFrame"), constant$1("getFrameSnapshot"), constant$1("forceLoadWindow"), constant$1("ejectWindow"), constant$1("setItemTitle"), constant$1("moveWindowTo"), constant$1("addWindow"), constant$1("addContainer"), constant$1("bundleWorkspace"), constant$1("changeFrameState"), constant$1("getFrameState"), constant$1("frameHello"));
+    const workspacesOperationDecoder = oneOf$1(constant$1("isWindowInWorkspace"), constant$1("createWorkspace"), constant$1("getAllFramesSummaries"), constant$1("getFrameSummary"), constant$1("getAllWorkspacesSummaries"), constant$1("getWorkspaceSnapshot"), constant$1("getAllLayoutsSummaries"), constant$1("openWorkspace"), constant$1("deleteLayout"), constant$1("saveLayout"), constant$1("importLayout"), constant$1("exportAllLayouts"), constant$1("restoreItem"), constant$1("maximizeItem"), constant$1("focusItem"), constant$1("closeItem"), constant$1("resizeItem"), constant$1("moveFrame"), constant$1("getFrameSnapshot"), constant$1("forceLoadWindow"), constant$1("ejectWindow"), constant$1("setItemTitle"), constant$1("moveWindowTo"), constant$1("addWindow"), constant$1("addContainer"), constant$1("bundleWorkspace"), constant$1("changeFrameState"), constant$1("getFrameState"), constant$1("getFrameBounds"), constant$1("frameHello"), constant$1("hibernateWorkspace"), constant$1("resumeWorkspace"), constant$1("getWorkspacesConfig"), constant$1("lockWorkspace"), constant$1("lockContainer"), constant$1("lockWindow"));
     const frameHelloDecoder = object$1({
         windowId: optional$1(nonEmptyStringDecoder$1)
     });
@@ -24077,12 +24770,48 @@
     });
     const parentDefinitionDecoder = object$1({
         type: optional$1(subParentDecoder),
-        children: optional$1(lazy$1(() => array$1(oneOf$1(swimlaneWindowDefinitionDecoder, parentDefinitionDecoder))))
+        children: optional$1(lazy$1(() => array$1(oneOf$1(swimlaneWindowDefinitionDecoder, parentDefinitionDecoder)))),
+        config: optional$1(anyJson$1())
     });
-    const strictParentDefinitionDecoder = object$1({
-        type: subParentDecoder,
-        children: optional$1(lazy$1(() => array$1(oneOf$1(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder))))
+    const groupDefinitionConfigDecoder = object$1({
+        minWidth: optional$1(number$1()),
+        maxWidth: optional$1(number$1()),
+        minHeight: optional$1(number$1()),
+        maxHeight: optional$1(number$1()),
+        allowExtract: optional$1(boolean$1()),
+        allowDrop: optional$1(boolean$1()),
+        showMaximizeButton: optional$1(boolean$1()),
+        showEjectButton: optional$1(boolean$1()),
+        showAddWindowButton: optional$1(boolean$1())
     });
+    const rowDefinitionConfigDecoder = object$1({
+        minHeight: optional$1(number$1()),
+        maxHeight: optional$1(number$1()),
+        allowDrop: optional$1(boolean$1()),
+        isPinned: optional$1(boolean$1())
+    });
+    const columnDefinitionConfigDecoder = object$1({
+        minWidth: optional$1(number$1()),
+        maxWidth: optional$1(number$1()),
+        allowDrop: optional$1(boolean$1()),
+        isPinned: optional$1(boolean$1())
+    });
+    const strictColumnDefinitionDecoder = object$1({
+        type: constant$1("column"),
+        children: optional$1(lazy$1(() => array$1(oneOf$1(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder)))),
+        config: optional$1(columnDefinitionConfigDecoder)
+    });
+    const strictRowDefinitionDecoder = object$1({
+        type: constant$1("row"),
+        children: optional$1(lazy$1(() => array$1(oneOf$1(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder)))),
+        config: optional$1(rowDefinitionConfigDecoder)
+    });
+    const strictGroupDefinitionDecoder = object$1({
+        type: constant$1("group"),
+        children: optional$1(lazy$1(() => array$1(oneOf$1(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder)))),
+        config: optional$1(groupDefinitionConfigDecoder)
+    });
+    const strictParentDefinitionDecoder = oneOf$1(strictGroupDefinitionDecoder, strictColumnDefinitionDecoder, strictRowDefinitionDecoder);
     const stateDecoder = oneOf$1(string$1().where((s) => s.toLowerCase() === "maximized", "Expected a case insensitive variation of 'maximized'"), string$1().where((s) => s.toLowerCase() === "normal", "Expected a case insensitive variation of 'normal'"));
     const newFrameConfigDecoder = object$1({
         bounds: optional$1(object$1({
@@ -24092,11 +24821,11 @@
             height: optional$1(nonNegativeNumberDecoder$1)
         }))
     });
-    const restoreTypeDecoder = oneOf$1(constant$1("direct"), constant$1("delayed"), constant$1("lazy"));
+    const loadStrategyDecoder = oneOf$1(constant$1("direct"), constant$1("delayed"), constant$1("lazy"));
     const restoreWorkspaceConfigDecoder = object$1({
         app: optional$1(nonEmptyStringDecoder$1),
         context: optional$1(anyJson$1()),
-        restoreType: optional$1(restoreTypeDecoder),
+        loadStrategy: optional$1(loadStrategyDecoder),
         title: optional$1(nonEmptyStringDecoder$1),
         reuseWorkspaceId: optional$1(nonEmptyStringDecoder$1),
         frameId: optional$1(nonEmptyStringDecoder$1),
@@ -24117,7 +24846,17 @@
             title: optional$1(nonEmptyStringDecoder$1),
             position: optional$1(nonNegativeNumberDecoder$1),
             isFocused: optional$1(boolean$1()),
-            noTabHeader: optional$1(boolean$1())
+            loadStrategy: optional$1(loadStrategyDecoder),
+            noTabHeader: optional$1(boolean$1()),
+            allowDrop: optional$1(boolean$1()),
+            allowDropLeft: optional$1(boolean$1()),
+            allowDropTop: optional$1(boolean$1()),
+            allowDropRight: optional$1(boolean$1()),
+            allowDropBottom: optional$1(boolean$1()),
+            allowExtract: optional$1(boolean$1()),
+            showSaveButton: optional$1(boolean$1()),
+            showCloseButton: optional$1(boolean$1()),
+            allowSplitters: optional$1(boolean$1()),
         })),
         frame: optional$1(object$1({
             reuseFrameId: optional$1(nonEmptyStringDecoder$1),
@@ -24165,7 +24904,28 @@
         title: nonEmptyStringDecoder$1,
         positionIndex: nonNegativeNumberDecoder$1,
         name: nonEmptyStringDecoder$1,
-        layoutName: optional$1(nonEmptyStringDecoder$1)
+        layoutName: optional$1(nonEmptyStringDecoder$1),
+        isHibernated: boolean$1(),
+        isSelected: boolean$1(),
+        lastActive: number$1(),
+        allowDrop: boolean$1(),
+        allowExtract: boolean$1(),
+        allowSplitters: boolean$1(),
+        showCloseButton: boolean$1(),
+        showSaveButton: boolean$1(),
+        allowDropLeft: boolean$1(),
+        allowDropTop: boolean$1(),
+        allowDropRight: boolean$1(),
+        allowDropBottom: boolean$1(),
+        showAddWindowButtons: boolean$1(),
+        showEjectButtons: boolean$1(),
+        showWindowCloseButtons: boolean$1(),
+        minWidth: optional$1(number$1()),
+        maxWidth: optional$1(number$1()),
+        minHeight: optional$1(number$1()),
+        maxHeight: optional$1(number$1()),
+        widthInPx: optional$1(number$1()),
+        heightInPx: optional$1(number$1())
     });
     const baseChildSnapshotConfigDecoder = object$1({
         frameId: nonEmptyStringDecoder$1,
@@ -24264,6 +25024,14 @@
     const frameStateResultDecoder = object$1({
         state: frameStateDecoder
     });
+    const frameBoundsResultDecoder = object$1({
+        bounds: object$1({
+            top: nonNegativeNumberDecoder$1,
+            left: nonNegativeNumberDecoder$1,
+            width: nonNegativeNumberDecoder$1,
+            height: nonNegativeNumberDecoder$1
+        })
+    });
     const resizeConfigDecoder = object$1({
         width: optional$1(nonNegativeNumberDecoder$1),
         height: optional$1(nonNegativeNumberDecoder$1),
@@ -24316,6 +25084,9 @@
         type: oneOf$1(constant$1("row"), constant$1("column")),
         workspaceId: nonEmptyStringDecoder$1
     });
+    const workspaceSelectorDecoder = object$1({
+        workspaceId: nonEmptyStringDecoder$1
+    });
     const containerSummaryResultDecoder = object$1({
         itemId: nonEmptyStringDecoder$1,
         config: parentSnapshotConfigDecoder
@@ -24342,6 +25113,56 @@
         workspaceId: nonEmptyStringDecoder$1,
         saveContext: optional$1(boolean$1())
     });
+    const lockWorkspaceDecoder = object$1({
+        workspaceId: nonEmptyStringDecoder$1,
+        config: optional$1(object$1({
+            allowDrop: optional$1(boolean$1()),
+            allowDropLeft: optional$1(boolean$1()),
+            allowDropTop: optional$1(boolean$1()),
+            allowDropRight: optional$1(boolean$1()),
+            allowDropBottom: optional$1(boolean$1()),
+            allowExtract: optional$1(boolean$1()),
+            allowSplitters: optional$1(boolean$1()),
+            showCloseButton: optional$1(boolean$1()),
+            showSaveButton: optional$1(boolean$1()),
+            showWindowCloseButtons: optional$1(boolean$1()),
+            showEjectButtons: optional$1(boolean$1()),
+            showAddWindowButtons: optional$1(boolean$1())
+        }))
+    });
+    const lockWindowDecoder = object$1({
+        windowPlacementId: nonEmptyStringDecoder$1,
+        config: optional$1(object$1({
+            allowExtract: optional$1(boolean$1()),
+            showCloseButton: optional$1(boolean$1())
+        }))
+    });
+    const lockRowDecoder = object$1({
+        itemId: nonEmptyStringDecoder$1,
+        type: constant$1("row"),
+        config: optional$1(object$1({
+            allowDrop: optional$1(boolean$1()),
+        }))
+    });
+    const lockColumnDecoder = object$1({
+        itemId: nonEmptyStringDecoder$1,
+        type: constant$1("column"),
+        config: optional$1(object$1({
+            allowDrop: optional$1(boolean$1()),
+        }))
+    });
+    const lockGroupDecoder = object$1({
+        itemId: nonEmptyStringDecoder$1,
+        type: constant$1("group"),
+        config: optional$1(object$1({
+            allowExtract: optional$1(boolean$1()),
+            allowDrop: optional$1(boolean$1()),
+            showMaximizeButton: optional$1(boolean$1()),
+            showEjectButton: optional$1(boolean$1()),
+            showAddWindowButton: optional$1(boolean$1()),
+        }))
+    });
+    const lockContainerDecoder = oneOf$1(lockColumnDecoder, lockGroupDecoder, lockRowDecoder);
 
     class WindowsController$1 {
         constructor(glueController, sessionController, stateController, ioc) {
@@ -24354,6 +25175,7 @@
                 openWindow: { name: "openWindow", execute: this.openWindow.bind(this), dataDecoder: openWindowConfigDecoder$1 },
                 windowHello: { name: "windowHello", execute: this.handleWindowHello.bind(this) },
                 getBounds: { name: "getBounds", dataDecoder: simpleWindowDecoder$1, resultDecoder: windowBoundsResultDecoder$1, execute: this.handleGetBounds.bind(this) },
+                getFrameBounds: { name: "getFrameBounds", dataDecoder: simpleWindowDecoder$1, resultDecoder: frameWindowBoundsResultDecoder$1, execute: this.handleGetBounds.bind(this) },
                 getUrl: { name: "getUrl", dataDecoder: simpleWindowDecoder$1, resultDecoder: windowUrlResultDecoder$1, execute: this.handleGetUrl.bind(this) },
                 moveResize: { name: "moveResize", dataDecoder: windowMoveResizeConfigDecoder$1, execute: this.handleMoveResize.bind(this) },
                 focus: { name: "focus", dataDecoder: simpleWindowDecoder$1, execute: this.handleFocus.bind(this) },
@@ -24369,6 +25191,9 @@
         }
         get moveResizeOperation() {
             return this.operations.moveResize;
+        }
+        get getFrameBoundsOperation() {
+            return this.operations.getFrameBounds;
         }
         get setTitleOperation() {
             return this.operations.setTitle;
@@ -24444,7 +25269,7 @@
             if (!windowId) {
                 return;
             }
-            if (win.closed) {
+            if (!win || win.closed) {
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`${windowId} detected as closed, processing window cleanup`);
                 return this.cleanUpWindow(windowId);
             }
@@ -24486,7 +25311,7 @@
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling open command with a valid name: ${config.name}, url: ${config.url} and options: ${JSON.stringify(config.options)}`);
                 const windowData = {
                     name: config.name,
-                    windowId: (_c = (_b = config.options) === null || _b === void 0 ? void 0 : _b.windowId) !== null && _c !== void 0 ? _c : shortid$1.generate()
+                    windowId: (_c = (_b = config.options) === null || _b === void 0 ? void 0 : _b.windowId) !== null && _c !== void 0 ? _c : shortid$2.generate()
                 };
                 const openBounds = yield this.getStartingBounds(config, commandId);
                 const options = `left=${openBounds.left},top=${openBounds.top},width=${openBounds.width},height=${openBounds.height}`;
@@ -24666,8 +25491,10 @@
             this.nonGlueNamespace = "g42_core_nonglue";
             this.workspaceWindowsNamespace = "g42_core_workspace_clients";
             this.workspaceFramesNamespace = "g42_core_workspace_frames";
+            this.workspaceHibernationNamespace = "g42_core_workspace_hibernation";
             this.layoutNamespace = "g42_core_layouts";
             this.appDefsNamespace = "g42_core_app_definitions";
+            this.appDefsInmemoryNamespace = "g42_core_app_definitions_inmemory";
             this.sessionStorage = window.sessionStorage;
             [
                 this.bridgeInstancesNamespace,
@@ -24677,7 +25504,9 @@
                 this.workspaceWindowsNamespace,
                 this.workspaceFramesNamespace,
                 this.layoutNamespace,
-                this.appDefsNamespace
+                this.appDefsNamespace,
+                this.workspaceHibernationNamespace,
+                this.appDefsInmemoryNamespace
             ].forEach((namespace) => {
                 const data = this.sessionStorage.getItem(namespace);
                 if (!data) {
@@ -24688,18 +25517,46 @@
         get logger() {
             return logger.get("session.storage");
         }
-        getAllApps() {
-            const appsString = JSON.parse(this.sessionStorage.getItem(this.appDefsNamespace));
+        getTimeout(workspaceId) {
+            var _a;
+            const timers = JSON.parse(this.sessionStorage.getItem(this.workspaceHibernationNamespace));
+            return (_a = timers.find((timer) => timer.workspaceId === workspaceId)) === null || _a === void 0 ? void 0 : _a.timeout;
+        }
+        removeTimeout(workspaceId) {
+            const timers = JSON.parse(this.sessionStorage.getItem(this.workspaceHibernationNamespace));
+            const timer = timers.find((timer) => timer.workspaceId === workspaceId);
+            if (timer) {
+                this.sessionStorage.setItem(this.workspaceHibernationNamespace, JSON.stringify(timers.filter((timer) => timer.workspaceId !== workspaceId)));
+            }
+        }
+        saveTimeout(workspaceId, timeout) {
+            const allData = JSON.parse(this.sessionStorage.getItem(this.workspaceHibernationNamespace));
+            if (allData.some((data) => data.workspaceId === workspaceId)) {
+                return;
+            }
+            allData.push({ workspaceId, timeout });
+            this.sessionStorage.setItem(this.workspaceHibernationNamespace, JSON.stringify(allData));
+        }
+        exportClearTimeouts() {
+            const timers = JSON.parse(this.sessionStorage.getItem(this.workspaceHibernationNamespace));
+            this.sessionStorage.setItem(this.workspaceHibernationNamespace, JSON.stringify([]));
+            return timers;
+        }
+        getAllApps(type) {
+            const namespace = type === "remote" ? this.appDefsNamespace : this.appDefsInmemoryNamespace;
+            const appsString = JSON.parse(this.sessionStorage.getItem(namespace));
             return appsString;
         }
-        overwriteApps(apps) {
-            this.sessionStorage.setItem(this.appDefsNamespace, JSON.stringify(apps));
+        overwriteApps(apps, type) {
+            const namespace = type === "remote" ? this.appDefsNamespace : this.appDefsInmemoryNamespace;
+            this.sessionStorage.setItem(namespace, JSON.stringify(apps));
         }
-        removeApp(name) {
-            const all = this.getAllApps();
+        removeApp(name, type) {
+            const namespace = type === "remote" ? this.appDefsNamespace : this.appDefsInmemoryNamespace;
+            const all = this.getAllApps(type);
             const app = all.find((app) => app.name === name);
             if (app) {
-                this.sessionStorage.setItem(this.appDefsNamespace, JSON.stringify(all.filter((a) => a.name !== name)));
+                this.sessionStorage.setItem(namespace, JSON.stringify(all.filter((a) => a.name !== name)));
             }
             return app;
         }
@@ -24885,10 +25742,10 @@
         }
     }
 
-    class StateController {
+    class WindowsStateController {
         constructor(sessionStorage) {
             this.sessionStorage = sessionStorage;
-            this.registry = lib$4();
+            this.registry = lib$5();
             this.checkIntervalMs = 500;
             this.childrenToCheck = [];
             this.checkerCancelled = false;
@@ -24948,7 +25805,7 @@
         }
     }
 
-    const appManagerOperationTypesDecoder$1 = oneOf$1(constant$1("appHello"), constant$1("applicationStart"), constant$1("instanceStop"), constant$1("registerWorkspaceApp"), constant$1("unregisterWorkspaceApp"), constant$1("export"), constant$1("import"), constant$1("remove"), constant$1("clear"));
+    const appManagerOperationTypesDecoder$1 = oneOf$1(constant$1("appHello"), constant$1("applicationStart"), constant$1("instanceStop"), constant$1("registerWorkspaceApp"), constant$1("unregisterWorkspaceApp"), constant$1("export"), constant$1("import"), constant$1("remove"), constant$1("clear"), constant$1("registerRemoteApps"));
     const basicInstanceDataDecoder$1 = object$1({
         id: nonEmptyStringDecoder$1
     });
@@ -25005,12 +25862,16 @@
     const appsExportOperationDecoder$1 = object$1({
         definitions: array$1(glueCoreAppDefinitionDecoder)
     });
+    const appsRemoteRegistrationDecoder = object$1({
+        definitions: array$1(allApplicationDefinitionsDecoder$1)
+    });
 
     class ApplicationsController {
-        constructor(glueController, sessionStorage, stateController, ioc) {
+        constructor(glueController, sessionStorage, stateController, appDirectory, ioc) {
             this.glueController = glueController;
             this.sessionStorage = sessionStorage;
             this.stateController = stateController;
+            this.appDirectory = appDirectory;
             this.ioc = ioc;
             this.applicationStartTimeoutMs = 15000;
             this.started = false;
@@ -25024,7 +25885,8 @@
                 import: { name: "import", dataDecoder: appsImportOperationDecoder$1, execute: this.handleImport.bind(this) },
                 remove: { name: "remove", dataDecoder: appRemoveConfigDecoder$1, execute: this.handleRemove.bind(this) },
                 export: { name: "export", resultDecoder: appsExportOperationDecoder$1, execute: this.handleExport.bind(this) },
-                clear: { name: "clear", execute: this.handleClear.bind(this) }
+                clear: { name: "clear", execute: this.handleClear.bind(this) },
+                registerRemoteApps: { name: "registerRemoteApps", dataDecoder: appsRemoteRegistrationDecoder, execute: this.handleRegisterRemoteApps.bind(this) },
             };
         }
         get logger() {
@@ -25033,22 +25895,18 @@
         start(config) {
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
-                this.config = config.applications;
                 this.defaultBounds = config.windows.defaultWindowOpenBounds;
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("initializing applications");
-                yield this.setupApps(this.config);
+                this.config = config.applications;
+                this.appDirectory.start({
+                    config: config.applications,
+                    onAdded: (data) => this.emitStreamData("applicationAdded", data),
+                    onChanged: (data) => this.emitStreamData("applicationChanged", data),
+                    onRemoved: (data) => this.emitStreamData("applicationRemoved", data),
+                });
                 this.started = true;
                 this.stateController.onWindowDisappeared(this.processInstanceClosed.bind(this));
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace("initialization is completed");
-            });
-        }
-        setupApps(config) {
-            return __awaiter(this, void 0, void 0, function* () {
-                if (config.local && config.local.length) {
-                    const parsedDefinitions = config.local.map((def) => this.parseDefinition(def));
-                    const currentApps = this.sessionStorage.getAllApps();
-                    this.mergeImport(currentApps, parsedDefinitions);
-                }
             });
         }
         handleControl(args) {
@@ -25082,11 +25940,11 @@
             if (!windowId) {
                 return;
             }
-            if (win.closed) {
+            if (!win || win.closed) {
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`${windowId} detected as closed, processing instance closed`);
                 return this.processInstanceClosed(windowId);
             }
-            (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`${windowId} detected as closed, skipping instance closed procedure`);
+            (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`${windowId} detected as not closed, skipping instance closed procedure`);
         }
         unregisterWorkspaceApp(config) {
             this.processInstanceClosed(config.windowId);
@@ -25096,12 +25954,12 @@
             var _a, _b, _c, _d, _e, _f, _g, _h;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling application start command for application: ${config.name}`);
-                const appDefinition = this.sessionStorage.getAllApps().find((app) => app.name === config.name);
+                const appDefinition = this.appDirectory.getAll().find((app) => app.name === config.name);
                 if (!appDefinition) {
                     throw new Error(`Cannot start an instance of application: ${config.name}, because it is not found.`);
                 }
                 const instance = {
-                    id: (_b = config.id) !== null && _b !== void 0 ? _b : shortid$1.generate(),
+                    id: (_b = config.id) !== null && _b !== void 0 ? _b : shortid$2.generate(),
                     applicationName: config.name
                 };
                 const openBounds = yield this.getStartingBounds(appDefinition.createOptions, config, commandId);
@@ -25169,7 +26027,7 @@
                     (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] the lock is lifted, proceeding`);
                 }
                 const allInstances = this.sessionStorage.getAllInstancesData();
-                const allAppsFull = this.sessionStorage.getAllApps().map((app) => {
+                const allAppsFull = this.appDirectory.getAll().map((app) => {
                     const appInstances = allInstances.filter((inst) => inst.applicationName === app.name);
                     return Object.assign({}, app, { instances: appInstances });
                 });
@@ -25216,19 +26074,24 @@
                 (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] instance ${inst.id} has been closed, removed from store, announced stopped and notified windows, responding to caller`);
             });
         }
+        handleRegisterRemoteApps(config, commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling remote bypass command`);
+                if (this.config.remote) {
+                    throw new Error(`[${commandId}] cannot accept remote apps from the protocol, because there is an active remote configuration.`);
+                }
+                this.appDirectory.processAppDefinitions(config.definitions, { mode: "replace", type: "remote" });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] remote bypass command completed`);
+                return;
+            });
+        }
         handleImport(config, commandId) {
-            var _a, _b, _c;
+            var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling import command`);
-                const parsedDefinitions = config.definitions.map((def) => this.parseDefinition(def));
-                const currentApps = this.sessionStorage.getAllApps();
-                if (config.mode === "replace") {
-                    this.replaceImport(currentApps, parsedDefinitions);
-                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] replace import command completed`);
-                    return;
-                }
-                this.mergeImport(currentApps, parsedDefinitions);
-                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] merge import command completed`);
+                this.appDirectory.processAppDefinitions(config.definitions, { type: "inmemory", mode: config.mode });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] import command completed`);
                 return;
             });
         }
@@ -25236,7 +26099,7 @@
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling remove command for ${config.name}`);
-                const removed = this.sessionStorage.removeApp(config.name);
+                const removed = this.appDirectory.removeInMemory(config.name);
                 if (removed) {
                     (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`definition ${removed.name} removed successfully`);
                     this.emitStreamData("applicationRemoved", removed);
@@ -25244,62 +26107,21 @@
             });
         }
         handleExport(_, commandId) {
-            var _a;
+            var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling export command`);
-                const all = this.sessionStorage.getAllApps();
-                const reversed = all.map((def) => this.reverseParseDefinition(def));
-                return { definitions: reversed };
+                const definitions = this.appDirectory.exportInMemory();
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] export command successful`);
+                return { definitions };
             });
         }
         handleClear(_, commandId) {
-            var _a;
+            var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
                 (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling clear command`);
-                const allDefinitions = this.sessionStorage.getAllApps();
-                this.sessionStorage.overwriteApps([]);
-                allDefinitions.forEach((definition) => this.emitStreamData("applicationRemoved", definition));
+                this.appDirectory.processAppDefinitions([], { type: "inmemory", mode: "replace" });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] all in-memory apps are cleared`);
             });
-        }
-        mergeImport(currentApps, parsedDefinitions) {
-            var _a, _b;
-            for (const definition of parsedDefinitions) {
-                const defCurrentIdx = currentApps.findIndex((app) => app.name === definition.name);
-                if (defCurrentIdx > -1 && !objEqual(definition, currentApps[defCurrentIdx])) {
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`change detected at definition ${definition.name}`);
-                    this.emitStreamData("applicationChanged", definition);
-                    currentApps[defCurrentIdx] = definition;
-                    continue;
-                }
-                if (defCurrentIdx < 0) {
-                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`new definition: ${definition.name} detected, adding and announcing`);
-                    this.emitStreamData("applicationAdded", definition);
-                    currentApps.push(definition);
-                }
-            }
-            this.sessionStorage.overwriteApps(currentApps);
-        }
-        replaceImport(currentApps, parsedDefinitions) {
-            var _a, _b;
-            for (const definition of parsedDefinitions) {
-                const defCurrentIdx = currentApps.findIndex((app) => app.name === definition.name);
-                if (defCurrentIdx < 0) {
-                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`new definition: ${definition.name} detected, adding and announcing`);
-                    this.emitStreamData("applicationAdded", definition);
-                    continue;
-                }
-                if (!objEqual(definition, currentApps[defCurrentIdx])) {
-                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`change detected at definition ${definition.name}`);
-                    this.emitStreamData("applicationChanged", definition);
-                }
-                currentApps.splice(defCurrentIdx, 1);
-            }
-            currentApps.forEach((app) => {
-                var _a;
-                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`definition ${app.name} missing, removing and announcing`);
-                this.emitStreamData("applicationRemoved", app);
-            });
-            this.sessionStorage.overwriteApps(parsedDefinitions);
         }
         setLock(id) {
             const lock = {};
@@ -25319,7 +26141,7 @@
                 if (!data.appName) {
                     throw new Error(`Cannot register application with config: ${JSON.stringify(data)}, because no app name was found`);
                 }
-                if (!this.sessionStorage.getAllApps().some((app) => app.name === data.appName)) {
+                if (!this.appDirectory.getAll().some((app) => app.name === data.appName)) {
                     throw new Error(`Cannot register application with config: ${JSON.stringify(data)}, because no app with this name name was found`);
                 }
                 this.sessionStorage.saveBridgeInstanceData({ windowId: data.windowId, appName: data.appName });
@@ -25350,51 +26172,6 @@
             var _a;
             (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`sending notification of event: ${operation} with data: ${JSON.stringify(data)}`);
             this.glueController.pushSystemMessage("appManager", operation, data);
-        }
-        reverseParseDefinition(definition) {
-            const definitionDetails = definition.userProperties.details;
-            const _a = definition.userProperties, removedDetails = __rest(_a, ["details"]);
-            return {
-                name: definition.name,
-                type: definition.type || "window",
-                title: definition.title,
-                version: definition.version,
-                icon: definition.icon,
-                caption: definition.caption,
-                details: definitionDetails,
-                customProperties: removedDetails
-            };
-        }
-        parseDefinition(definition) {
-            var _a;
-            const glue42CoreAppProps = ["name", "title", "version", "customProperties", "icon", "caption", "type"];
-            const userProperties = Object.fromEntries(Object.entries(definition).filter(([key]) => !glue42CoreAppProps.includes(key)));
-            let createOptions = { url: "" };
-            if (definition.manifest) {
-                const parsedManifest = JSON.parse(definition.manifest);
-                const url = ((_a = parsedManifest.details) === null || _a === void 0 ? void 0 : _a.url) || parsedManifest.url;
-                if (!url || typeof url !== "string") {
-                    throw new Error(`The FDC3 definition: ${definition.name} is not valid, because there is not url defined in the manifest`);
-                }
-                createOptions.url = url;
-            }
-            else {
-                createOptions = definition.details;
-            }
-            const baseDefinition = {
-                createOptions,
-                type: definition.type || "window",
-                name: definition.name,
-                title: definition.title,
-                version: definition.version,
-                icon: definition.icon,
-                caption: definition.caption,
-                userProperties: Object.assign(Object.assign({}, userProperties), definition.customProperties)
-            };
-            if (!baseDefinition.userProperties.details) {
-                baseDefinition.userProperties.details = createOptions;
-            }
-            return baseDefinition;
         }
         getStartingBounds(appDefOptions, openOptions, commandId) {
             var _a;
@@ -25990,11 +26767,22 @@
         }
     }
 
+    const defaultLoadingConfig = {
+        defaultStrategy: "direct",
+        delayed: {
+            batch: 1,
+            initialOffsetInterval: 1000,
+            interval: 5000
+        },
+        showDelayedIndicator: false
+    };
+
     class WorkspacesController {
-        constructor(framesController, glueController, stateController, ioc) {
+        constructor(framesController, glueController, stateController, hibernationWatcher, ioc) {
             this.framesController = framesController;
             this.glueController = glueController;
             this.stateController = stateController;
+            this.hibernationWatcher = hibernationWatcher;
             this.ioc = ioc;
             this.started = false;
             this.operations = {
@@ -26018,6 +26806,7 @@
                 resizeItem: { name: "resizeItem", dataDecoder: resizeItemConfigDecoder, resultDecoder: voidResultDecoder, execute: this.resizeItem.bind(this) },
                 changeFrameState: { name: "changeFrameState", dataDecoder: frameStateConfigDecoder, resultDecoder: voidResultDecoder, execute: this.changeFrameState.bind(this) },
                 getFrameState: { name: "getFrameState", dataDecoder: simpleItemConfigDecoder, resultDecoder: frameStateResultDecoder, execute: this.getFrameState.bind(this) },
+                getFrameBounds: { name: "getFrameBounds", dataDecoder: simpleItemConfigDecoder, resultDecoder: frameBoundsResultDecoder, execute: this.getFrameBounds.bind(this) },
                 moveFrame: { name: "moveFrame", dataDecoder: moveFrameConfigDecoder, resultDecoder: voidResultDecoder, execute: this.moveFrame.bind(this) },
                 getFrameSnapshot: { name: "getFrameSnapshot", dataDecoder: simpleItemConfigDecoder, resultDecoder: frameSnapshotResultDecoder, execute: this.getFrameSnapshot.bind(this) },
                 forceLoadWindow: { name: "forceLoadWindow", dataDecoder: simpleItemConfigDecoder, resultDecoder: simpleWindowOperationSuccessResultDecoder, execute: this.forceLoadWindow.bind(this) },
@@ -26027,6 +26816,12 @@
                 addWindow: { name: "addWindow", dataDecoder: addWindowConfigDecoder, resultDecoder: addItemResultDecoder, execute: this.addWindow.bind(this) },
                 addContainer: { name: "addContainer", dataDecoder: addContainerConfigDecoder, resultDecoder: addItemResultDecoder, execute: this.addContainer.bind(this) },
                 bundleWorkspace: { name: "bundleWorkspace", dataDecoder: bundleConfigDecoder, resultDecoder: voidResultDecoder, execute: this.bundleWorkspace.bind(this) },
+                hibernateWorkspace: { name: "hibernateWorkspace", dataDecoder: workspaceSelectorDecoder, resultDecoder: voidResultDecoder, execute: this.hibernateWorkspace.bind(this) },
+                resumeWorkspace: { name: "resumeWorkspace", dataDecoder: workspaceSelectorDecoder, resultDecoder: voidResultDecoder, execute: this.resumeWorkspace.bind(this) },
+                getWorkspacesConfig: { name: "getWorkspacesConfig", resultDecoder: workspacesConfigDecoder, execute: this.getWorkspacesConfiguration.bind(this) },
+                lockWorkspace: { name: "lockWorkspace", dataDecoder: lockWorkspaceDecoder, resultDecoder: voidResultDecoder, execute: this.lockWorkspace.bind(this) },
+                lockWindow: { name: "lockWindow", dataDecoder: lockWindowDecoder, resultDecoder: voidResultDecoder, execute: this.lockWindow.bind(this) },
+                lockContainer: { name: "lockContainer", dataDecoder: lockContainerDecoder, resultDecoder: voidResultDecoder, execute: this.lockContainer.bind(this) }
             };
         }
         start(config) {
@@ -26035,7 +26830,10 @@
                     this.started = false;
                     return;
                 }
-                this.settings = config.workspaces;
+                this.settings = this.applyDefaults(config.workspaces);
+                if (this.settings.hibernation) {
+                    this.hibernationWatcher.start(this, this.settings.hibernation);
+                }
                 yield Promise.all([
                     this.glueController.createWorkspacesStream(),
                     this.glueController.createWorkspacesEventsReceiver(this.handleWorkspaceEvent.bind(this))
@@ -26078,13 +26876,16 @@
         handleClientUnloaded(windowId, win) {
             var _a, _b;
             (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`handling unloading of ${windowId}`);
-            if (win.closed) {
+            if (!win || win.closed) {
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`${windowId} detected as closed, checking if frame and processing close`);
                 this.framesController.handleFrameDisappeared(windowId);
             }
         }
         handleWorkspaceEvent(data) {
             this.glueController.pushWorkspacesMessage(data);
+            if (this.settings.hibernation) {
+                this.hibernationWatcher.notifyEvent(data);
+            }
         }
         closeItem(config, commandId) {
             var _a, _b, _c, _d, _e, _f;
@@ -26111,6 +26912,23 @@
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
                 yield this.glueController.callFrame(this.operations.setItemTitle, config, frame.windowId);
                 (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
+        hibernateWorkspace(config, commandId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling hibernateWorkspace request with config ${JSON.stringify(config)}`);
+                const frame = yield this.framesController.getFrameInstance({ itemId: config.workspaceId });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                yield this.glueController.callFrame(this.operations.hibernateWorkspace, config, frame.windowId);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
+        getWorkspacesConfiguration(config, commandId) {
+            var _a;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling getWorkspacesConfiguration request`);
+                return this.settings;
             });
         }
         handleFrameHello(config, commandId) {
@@ -26392,6 +27210,46 @@
                 (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
             });
         }
+        resumeWorkspace(config, commandId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling resumeWorkspace request with config ${JSON.stringify(config)}`);
+                const frame = yield this.framesController.getFrameInstance({ itemId: config.workspaceId });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                yield this.glueController.callFrame(this.operations.resumeWorkspace, config, frame.windowId);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
+        lockWorkspace(config, commandId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling lockWorkspace request with config ${JSON.stringify(config)}`);
+                const frame = yield this.framesController.getFrameInstance({ itemId: config.workspaceId });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                yield this.glueController.callFrame(this.operations.lockWorkspace, config, frame.windowId);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
+        lockContainer(config, commandId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling lockContainer request with config ${JSON.stringify(config)}`);
+                const frame = yield this.framesController.getFrameInstance({ itemId: config.itemId });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                yield this.glueController.callFrame(this.operations.lockContainer, config, frame.windowId);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
+        lockWindow(config, commandId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling lockWindow request with config ${JSON.stringify(config)}`);
+                const frame = yield this.framesController.getFrameInstance({ itemId: config.windowPlacementId });
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] targeting frame ${frame.windowId}`);
+                yield this.glueController.callFrame(this.operations.lockWindow, config, frame.windowId);
+                (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] frame ${frame.windowId} gave a success signal, responding to caller`);
+            });
+        }
         changeFrameState(config, commandId) {
             return __awaiter(this, void 0, void 0, function* () {
                 throw new Error("Frame states are not supported in Glue42 Core");
@@ -26400,6 +27258,16 @@
         getFrameState(config, commandId) {
             return __awaiter(this, void 0, void 0, function* () {
                 throw new Error("Frame states are not supported in Glue42 Core");
+            });
+        }
+        getFrameBounds(config, commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling getFrameBounds request with config ${JSON.stringify(config)}`);
+                const frame = yield this.framesController.getFrameInstance({ frameId: config.itemId });
+                const frameWindowBounds = yield this.glueController.callWindow(this.ioc.windowsController.getFrameBoundsOperation, { windowId: frame.windowId }, frame.windowId);
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] getFrameBounds completed`);
+                return { bounds: frameWindowBounds.bounds };
             });
         }
         moveFrame(config, commandId) {
@@ -26416,6 +27284,12 @@
                 yield this.glueController.callWindow(this.ioc.windowsController.moveResizeOperation, moveConfig, frame.windowId);
                 (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] frame with id ${frame.windowId} was successfully moved, responding to caller`);
             });
+        }
+        applyDefaults(config) {
+            const providedHibernationConfig = (config === null || config === void 0 ? void 0 : config.hibernation) || {};
+            const providedLoadingConfig = (config === null || config === void 0 ? void 0 : config.loadingStrategy) || {};
+            const loadingConfig = cjs(defaultLoadingConfig, providedLoadingConfig);
+            return Object.assign(Object.assign({}, config), { loadingStrategy: loadingConfig, hibernation: providedHibernationConfig });
         }
     }
 
@@ -26466,9 +27340,9 @@
     });
 
     class IntentsController$1 {
-        constructor(glueController, sessionStorage, ioc) {
+        constructor(glueController, appDirectory, ioc) {
             this.glueController = glueController;
-            this.sessionStorage = sessionStorage;
+            this.appDirectory = appDirectory;
             this.ioc = ioc;
             this.operations = {
                 getIntents: { name: "getIntents", resultDecoder: wrappedIntentsDecoder$1, execute: this.getWrappedIntents.bind(this) },
@@ -26585,7 +27459,7 @@
         getIntents(commandId) {
             var _a, _b;
             return __awaiter(this, void 0, void 0, function* () {
-                const apps = this.sessionStorage.getAllApps().map((app) => {
+                const apps = this.appDirectory.getAll().map((app) => {
                     return {
                         name: app.name,
                         title: app.title || "",
@@ -26793,10 +27667,19 @@
             this.defaultFrameHelloTimeoutMs = 15000;
         }
         start(config, defaultBounds, frameSummaryOperation) {
+            var _a;
             return __awaiter(this, void 0, void 0, function* () {
                 this.config = config;
                 this.defaultBounds = defaultBounds;
                 this.frameSummaryOperation = frameSummaryOperation;
+                if (config.isFrame) {
+                    this.myFrameId = (_a = this.sessionController.getAllFrames().find((frame) => frame.isPlatform)) === null || _a === void 0 ? void 0 : _a.windowId;
+                    window.addEventListener("beforeunload", () => {
+                        if (this.myFrameId) {
+                            this.clearAllWorkspaceWindows(this.myFrameId);
+                        }
+                    });
+                }
             });
         }
         openFrame(newFrameConfig) {
@@ -26809,7 +27692,7 @@
                     width: (_d = providedBounds.width) !== null && _d !== void 0 ? _d : this.defaultBounds.width,
                     height: (_e = providedBounds.height) !== null && _e !== void 0 ? _e : this.defaultBounds.height
                 };
-                const frameWindowId = shortid$1.generate();
+                const frameWindowId = shortid$2.generate();
                 const frameData = {
                     windowId: frameWindowId,
                     active: false,
@@ -26858,8 +27741,7 @@
                 return;
             }
             this.sessionController.removeFrameData(frameId);
-            const workspaceWindows = this.sessionController.pickWorkspaceClients((client) => client.frameId === frameId);
-            workspaceWindows.forEach((workspaceWindow) => this.ioc.applicationsController.unregisterWorkspaceApp({ windowId: workspaceWindow.windowId }));
+            this.clearAllWorkspaceWindows(frameId);
         }
         getAll() {
             const allFrames = this.sessionController.getAllFrames();
@@ -26896,6 +27778,10 @@
                 return allFrames.length ? this.getLastOpenedFrame() : this.openFrame();
             });
         }
+        clearAllWorkspaceWindows(frameId) {
+            const workspaceWindows = this.sessionController.pickWorkspaceClients((client) => client.frameId === frameId);
+            workspaceWindows.forEach((workspaceWindow) => this.ioc.applicationsController.unregisterWorkspaceApp({ windowId: workspaceWindow.windowId }));
+        }
         waitHello(windowId) {
             return __awaiter(this, void 0, void 0, function* () {
                 return PromisePlus$3((resolve) => {
@@ -26923,6 +27809,769 @@
         }
     }
 
+    class WorkspaceHibernationWatcher {
+        constructor(session) {
+            this.session = session;
+            this.maximumAmountCheckInProgress = false;
+        }
+        get logger() {
+            return logger.get("workspaces.hibernation");
+        }
+        start(workspacesController, settings) {
+            var _a, _b, _c, _d;
+            (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`starting the hibernation watcher with following settings: ${JSON.stringify(this.settings)}`);
+            this.workspacesController = workspacesController;
+            this.settings = settings;
+            const allTimeoutData = this.session.exportClearTimeouts();
+            if ((_c = (_b = this.settings) === null || _b === void 0 ? void 0 : _b.idleWorkspaces) === null || _c === void 0 ? void 0 : _c.idleMSThreshold) {
+                allTimeoutData.forEach((timeoutData) => this.buildTimer(timeoutData.workspaceId));
+            }
+            (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace("The hibernation watcher has started successfully");
+        }
+        notifyEvent(event) {
+            if (event.type === "window") {
+                this.handleWorkspaceWindowEvent(event);
+            }
+            if (event.type === "workspace") {
+                this.handleWorkspaceEvent(event);
+            }
+        }
+        handleWorkspaceWindowEvent(event) {
+            const isWindowOpened = event.action === "opened" || event.action === "added";
+            if (!isWindowOpened) {
+                return;
+            }
+            this.checkMaximumAmount();
+            this.addTimersForWorkspacesInFrame(event.payload.windowSummary.config.frameId);
+        }
+        handleWorkspaceEvent(event) {
+            const isWorkspaceSelected = event.action === "selected";
+            const workspaceData = event.payload;
+            if (event.action !== "selected" && event.action !== "opened") {
+                return;
+            }
+            this.checkMaximumAmount();
+            if (isWorkspaceSelected) {
+                const timeout = this.session.getTimeout(workspaceData.workspaceSummary.id);
+                if (timeout) {
+                    clearTimeout(timeout);
+                    this.session.removeTimeout(workspaceData.workspaceSummary.id);
+                }
+                this.addTimersForWorkspacesInFrame(workspaceData.frameSummary.id);
+            }
+        }
+        compare(ws1, ws2) {
+            if (ws1.config.lastActive > ws2.config.lastActive) {
+                return 1;
+            }
+            if (ws1.config.lastActive < ws2.config.lastActive) {
+                return -1;
+            }
+            return 0;
+        }
+        checkMaximumAmount() {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                if (this.maximumAmountCheckInProgress) {
+                    return;
+                }
+                if (!((_b = (_a = this.settings) === null || _a === void 0 ? void 0 : _a.maximumActiveWorkspaces) === null || _b === void 0 ? void 0 : _b.threshold)) {
+                    return;
+                }
+                this.maximumAmountCheckInProgress = true;
+                try {
+                    yield this.checkMaximumAmountCore(this.settings.maximumActiveWorkspaces.threshold);
+                }
+                finally {
+                    this.maximumAmountCheckInProgress = false;
+                }
+            });
+        }
+        checkMaximumAmountCore(threshold) {
+            var _a, _b, _c, _d;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`Checking for maximum active workspaces rule. The threshold is ${(_c = (_b = this.settings) === null || _b === void 0 ? void 0 : _b.maximumActiveWorkspaces) === null || _c === void 0 ? void 0 : _c.threshold}`);
+                const commandId = shortid$2.generate();
+                const result = yield this.workspacesController.getAllWorkspacesSummaries({}, commandId);
+                const snapshotsPromises = result.summaries.map(s => this.workspacesController.getWorkspaceSnapshot({ itemId: s.id }, commandId));
+                const snapshots = yield Promise.all(snapshotsPromises);
+                const eligibleForHibernation = snapshots.reduce((eligible, snapshot) => {
+                    if (!this.isWorkspaceHibernated(snapshot.config) && !this.isWorkspaceEmpty(snapshot)) {
+                        eligible.push(snapshot);
+                    }
+                    return eligible;
+                }, []);
+                if (eligibleForHibernation.length <= threshold) {
+                    return;
+                }
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`Found ${eligibleForHibernation.length} eligible for hibernation workspaces`);
+                const hibernationPromises = eligibleForHibernation
+                    .sort(this.compare)
+                    .slice(0, eligibleForHibernation.length - threshold)
+                    .map((w) => this.tryHibernateWorkspace(w.id));
+                yield Promise.all(hibernationPromises);
+            });
+        }
+        tryHibernateWorkspace(workspaceId) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                try {
+                    const snapshot = yield this.workspacesController.getWorkspaceSnapshot({ itemId: workspaceId }, shortid$2.generate());
+                    if (!this.canBeHibernated(snapshot)) {
+                        return;
+                    }
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`trying to hibernate workspace ${workspaceId}`);
+                    yield this.workspacesController.hibernateWorkspace({ workspaceId }, shortid$2.generate());
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`workspace ${workspaceId} was hibernated successfully`);
+                }
+                catch (error) {
+                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(error);
+                }
+            });
+        }
+        canBeHibernated(snapshot) {
+            const isWorkspaceHibernated = this.isWorkspaceHibernated(snapshot.config);
+            const isWorkspaceSelected = this.isWorkspaceSelected(snapshot.config);
+            const isWorkspaceEmpty = this.isWorkspaceEmpty(snapshot);
+            return !isWorkspaceHibernated && !isWorkspaceSelected && !isWorkspaceEmpty;
+        }
+        isWorkspaceHibernated(workspaceSnapshot) {
+            return workspaceSnapshot.isHibernated;
+        }
+        isWorkspaceSelected(workspaceSnapshot) {
+            return workspaceSnapshot.isSelected;
+        }
+        isWorkspaceEmpty(workspaceSnapshot) {
+            return !workspaceSnapshot.children.length;
+        }
+        getWorkspacesInFrame(frameId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const result = yield this.workspacesController.getAllWorkspacesSummaries({}, shortid$2.generate());
+                const snapshotPromises = result.summaries.reduce((promises, summary) => {
+                    if (summary.config.frameId === frameId) {
+                        promises.push(this.workspacesController.getWorkspaceSnapshot({ itemId: summary.id }, shortid$2.generate()));
+                    }
+                    return promises;
+                }, []);
+                return yield Promise.all(snapshotPromises);
+            });
+        }
+        addTimersForWorkspacesInFrame(frameId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!((_b = (_a = this.settings) === null || _a === void 0 ? void 0 : _a.idleWorkspaces) === null || _b === void 0 ? void 0 : _b.idleMSThreshold)) {
+                    return;
+                }
+                const workspacesInFrame = yield this.getWorkspacesInFrame(frameId);
+                workspacesInFrame.map((w) => {
+                    var _a, _b, _c;
+                    if (!this.canBeHibernated(w) || this.session.getTimeout(w.id)) {
+                        return;
+                    }
+                    this.buildTimer(w.id);
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`Starting workspace idle timer ( ${(_c = (_b = this.settings) === null || _b === void 0 ? void 0 : _b.idleWorkspaces) === null || _c === void 0 ? void 0 : _c.idleMSThreshold}ms ) for workspace ${w.id}`);
+                });
+            });
+        }
+        buildTimer(workspaceId) {
+            var _a, _b;
+            const timeout = setTimeout(() => {
+                var _a;
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`Timer triggered will try to hibernated ${workspaceId}`);
+                this.tryHibernateWorkspace(workspaceId);
+                this.session.removeTimeout(workspaceId);
+            }, (_b = (_a = this.settings) === null || _a === void 0 ? void 0 : _a.idleWorkspaces) === null || _b === void 0 ? void 0 : _b.idleMSThreshold);
+            this.session.saveTimeout(workspaceId, timeout);
+        }
+    }
+
+    class SystemController$1 {
+        constructor() {
+            this.base = {};
+            this.started = false;
+            this.operations = {
+                getEnvironment: { name: "getEnvironment", resultDecoder: anyDecoder$1, execute: this.handleGetEnvironment.bind(this) },
+                getBase: { name: "getBase", resultDecoder: anyDecoder$1, execute: this.handleGetBase.bind(this) }
+            };
+        }
+        get logger() {
+            return logger.get("applications.controller");
+        }
+        start(config) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                this.environment = config.environment;
+                this.base = {
+                    workspacesFrameCache: typeof ((_a = config.workspaces) === null || _a === void 0 ? void 0 : _a.frameCache) === "boolean" ? (_b = config.workspaces) === null || _b === void 0 ? void 0 : _b.frameCache : true
+                };
+            });
+        }
+        handleControl(args) {
+            var _a, _b, _c, _d;
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!this.started) ;
+                const applicationData = args.data;
+                const commandId = args.commandId;
+                const operationValidation = systemOperationTypesDecoder.run(args.operation);
+                if (!operationValidation.ok) {
+                    throw new Error(`This system request cannot be completed, because the operation name did not pass validation: ${JSON.stringify(operationValidation.error)}`);
+                }
+                const operationName = operationValidation.result;
+                const incomingValidation = (_a = this.operations[operationName].dataDecoder) === null || _a === void 0 ? void 0 : _a.run(applicationData);
+                if (incomingValidation && !incomingValidation.ok) {
+                    throw new Error(`System request for ${operationName} rejected, because the provided arguments did not pass the validation: ${JSON.stringify(incomingValidation.error)}`);
+                }
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.debug(`[${commandId}] ${operationName} command is valid with data: ${JSON.stringify(applicationData)}`);
+                const result = yield this.operations[operationName].execute(applicationData, commandId);
+                const resultValidation = (_c = this.operations[operationName].resultDecoder) === null || _c === void 0 ? void 0 : _c.run(result);
+                if (resultValidation && !resultValidation.ok) {
+                    throw new Error(`System request for ${operationName} could not be completed, because the operation result did not pass the validation: ${JSON.stringify(resultValidation.error)}`);
+                }
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] ${operationName} command was executed successfully`);
+                return result;
+            });
+        }
+        handleGetEnvironment() {
+            return __awaiter(this, void 0, void 0, function* () {
+                return this.environment;
+            });
+        }
+        handleGetBase() {
+            return __awaiter(this, void 0, void 0, function* () {
+                return this.base;
+            });
+        }
+    }
+
+    class AppDirectory {
+        constructor(sessionStorage, remoteWatcher) {
+            this.sessionStorage = sessionStorage;
+            this.remoteWatcher = remoteWatcher;
+        }
+        start(setup) {
+            var _a, _b, _c;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("Starting the application directory");
+                this.onAdded = setup.onAdded;
+                this.onChanged = setup.onChanged;
+                this.onRemoved = setup.onRemoved;
+                if (setup.config.local && setup.config.local.length) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace("Detected local applications, parsing...");
+                    const parsedDefinitions = setup.config.local.map((def) => this.parseDefinition(def));
+                    const currentApps = this.sessionStorage.getAllApps("inmemory");
+                    const merged = this.merge(currentApps, parsedDefinitions);
+                    this.sessionStorage.overwriteApps(merged, "inmemory");
+                }
+                if (setup.config.remote) {
+                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace("Detected remote app store configuration, starting the watcher...");
+                    this.remoteWatcher.start(setup.config.remote, (apps) => this.processAppDefinitions(apps, { type: "remote", mode: "replace" }));
+                }
+            });
+        }
+        processAppDefinitions(definitions, config) {
+            const parsedDefinitions = definitions.map((def) => this.parseDefinition(def));
+            const currentApps = this.sessionStorage.getAllApps(config.type);
+            const updatedApps = this[config.mode](currentApps, parsedDefinitions);
+            this.sessionStorage.overwriteApps(updatedApps, config.type);
+        }
+        getAll() {
+            const inMemory = this.sessionStorage.getAllApps("inmemory");
+            const remote = this.sessionStorage.getAllApps("remote");
+            return inMemory.concat(remote);
+        }
+        exportInMemory() {
+            const allBaseApps = this.sessionStorage.getAllApps("inmemory");
+            return allBaseApps.map(this.reverseParseDefinition);
+        }
+        removeInMemory(name) {
+            return this.sessionStorage.removeApp(name, "inmemory");
+        }
+        merge(currentApps, parsedDefinitions) {
+            var _a, _b;
+            for (const definition of parsedDefinitions) {
+                const defCurrentIdx = currentApps.findIndex((app) => app.name === definition.name);
+                if (defCurrentIdx > -1 && !objEqual(definition, currentApps[defCurrentIdx])) {
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`change detected at definition ${definition.name}`);
+                    this.onChanged(definition);
+                    currentApps[defCurrentIdx] = definition;
+                    continue;
+                }
+                if (defCurrentIdx < 0) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`new definition: ${definition.name} detected, adding and announcing`);
+                    this.onAdded(definition);
+                    currentApps.push(definition);
+                }
+            }
+            return currentApps;
+        }
+        replace(currentApps, parsedDefinitions) {
+            var _a, _b;
+            for (const definition of parsedDefinitions) {
+                const defCurrentIdx = currentApps.findIndex((app) => app.name === definition.name);
+                if (defCurrentIdx < 0) {
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`new definition: ${definition.name} detected, adding and announcing`);
+                    this.onAdded(definition);
+                    continue;
+                }
+                if (!objEqual(definition, currentApps[defCurrentIdx])) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`change detected at definition ${definition.name}`);
+                    this.onChanged(definition);
+                }
+                currentApps.splice(defCurrentIdx, 1);
+            }
+            currentApps.forEach((app) => {
+                var _a;
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`definition ${app.name} missing, removing and announcing`);
+                this.onRemoved(app);
+            });
+            return parsedDefinitions;
+        }
+        reverseParseDefinition(definition) {
+            const definitionDetails = definition.userProperties.details;
+            const _a = definition.userProperties, removedDetails = __rest(_a, ["details"]);
+            return {
+                name: definition.name,
+                type: definition.type || "window",
+                title: definition.title,
+                version: definition.version,
+                icon: definition.icon,
+                caption: definition.caption,
+                details: definitionDetails,
+                customProperties: removedDetails
+            };
+        }
+        parseDefinition(definition) {
+            var _a;
+            const glue42CoreAppProps = ["name", "title", "version", "customProperties", "icon", "caption", "type"];
+            const userProperties = Object.fromEntries(Object.entries(definition).filter(([key]) => !glue42CoreAppProps.includes(key)));
+            let createOptions = { url: "" };
+            if (definition.manifest) {
+                const parsedManifest = JSON.parse(definition.manifest);
+                const url = ((_a = parsedManifest.details) === null || _a === void 0 ? void 0 : _a.url) || parsedManifest.url;
+                if (!url || typeof url !== "string") {
+                    throw new Error(`The FDC3 definition: ${definition.name} is not valid, because there is not url defined in the manifest`);
+                }
+                createOptions.url = url;
+            }
+            else {
+                createOptions = definition.details;
+            }
+            const baseDefinition = {
+                createOptions,
+                type: definition.type || "window",
+                name: definition.name,
+                title: definition.title,
+                version: definition.version,
+                icon: definition.icon,
+                caption: definition.caption,
+                userProperties: Object.assign(Object.assign({}, userProperties), definition.customProperties)
+            };
+            if (!baseDefinition.userProperties.details) {
+                baseDefinition.userProperties.details = createOptions;
+            }
+            return baseDefinition;
+        }
+        get logger() {
+            return logger.get("applications.remote.directory");
+        }
+    }
+
+    const fetchTimeout = (request, timeoutMilliseconds = defaultFetchTimeoutMs) => {
+        return new Promise((resolve, reject) => {
+            let timeoutHit = false;
+            const timeout = setTimeout(() => {
+                timeoutHit = true;
+                reject(new Error(`Fetch request for: ${JSON.stringify(request)} timed out at: ${timeoutMilliseconds} milliseconds`));
+            }, timeoutMilliseconds);
+            fetch(request)
+                .then((response) => {
+                if (!timeoutHit) {
+                    clearTimeout(timeout);
+                    resolve(response);
+                }
+            })
+                .catch((err) => {
+                if (!timeoutHit) {
+                    clearTimeout(timeout);
+                    reject(err);
+                }
+            });
+        });
+    };
+
+    const defaultRemoteWatcherHeaders = {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    };
+    const defaultRemoteWatcherRequestTimeoutMS = 3000;
+
+    class RemoteWatcher {
+        start(config, handleApps) {
+            var _a;
+            this.url = config.url;
+            this.handleApps = handleApps;
+            this.requestTimeout = config.requestTimeout || defaultRemoteWatcherRequestTimeoutMS;
+            this.pollingInterval = config.pollingInterval;
+            this.setRequest(config.customHeaders);
+            (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`Remote watcher configured with timeout: ${this.requestTimeout} and interval: ${this.pollingInterval}`);
+            this.poll();
+        }
+        poll() {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                try {
+                    const response = yield fetchTimeout(this.request, this.requestTimeout);
+                    const responseJson = yield response.json();
+                    if (!responseJson || !Array.isArray(responseJson.applications)) {
+                        throw new Error("The remote response was either empty or did not contain an applications collection");
+                    }
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("There is a valid response from the app store, processing definitions...");
+                    const validatedApps = responseJson.applications.reduce((soFar, app) => {
+                        var _a;
+                        const result = allApplicationDefinitionsDecoder$1.run(app);
+                        if (result.ok) {
+                            soFar.push(app);
+                        }
+                        else {
+                            (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(`Removing applications definition with name: ${app.name} from the remote response, because of validation error: ${JSON.stringify(result.error)}`);
+                        }
+                        return soFar;
+                    }, []);
+                    this.handleApps(validatedApps);
+                }
+                catch (error) {
+                    const stringError = typeof error === "string" ? error : JSON.stringify(error.message);
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.warn(stringError);
+                }
+                finally {
+                    if (this.pollingInterval) {
+                        yield this.waitInterval();
+                        this.poll();
+                    }
+                }
+            });
+        }
+        setRequest(customHeaders = {}) {
+            var _a;
+            const requestHeaders = new Headers();
+            for (const key in defaultRemoteWatcherHeaders) {
+                requestHeaders.append(key, defaultRemoteWatcherHeaders[key]);
+            }
+            for (const key in customHeaders) {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace("Custom headers detected and set");
+                requestHeaders.append(key, customHeaders[key]);
+            }
+            this.request = new Request(this.url, {
+                method: "GET",
+                headers: requestHeaders,
+                mode: "cors",
+                cache: "default"
+            });
+        }
+        waitInterval() {
+            return new Promise((resolve) => setTimeout(resolve, this.pollingInterval));
+        }
+        get logger() {
+            return logger.get("applications.remote.directory");
+        }
+    }
+
+    class ServiceWorkerController {
+        constructor() {
+            this.registry = lib$5();
+        }
+        get logger() {
+            return logger.get("service.worker.web.platform");
+        }
+        get serviceWorkerRegistration() {
+            if (!this._serviceWorkerRegistration) {
+                throw new Error("Accessing missing service worker registration object. This is caused because the application is trying to raise a persistent notification, which requires a service worker. Please provide a service worker config when initializing GlueWebPlatform.");
+            }
+            return this._serviceWorkerRegistration;
+        }
+        connect(config) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!config.serviceWorker) {
+                    return;
+                }
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.info("Detected service worker definition, connecting...");
+                if (!config.serviceWorker.url && !config.serviceWorker.registrationPromise) {
+                    throw new Error("The service worker config is defined, but it is missing a url or a registration promise, please provide one or the other");
+                }
+                if (config.serviceWorker.url && config.serviceWorker.registrationPromise) {
+                    throw new Error("The service worker is over-specified, there is both defined url and a registration promise, please provide one or the other");
+                }
+                this._serviceWorkerRegistration = config.serviceWorker.url ?
+                    yield this.registerWorker(config.serviceWorker.url) :
+                    yield this.waitRegistration(config.serviceWorker.registrationPromise);
+                if (this._serviceWorkerRegistration) {
+                    this.setUpBroadcastChannelConnection();
+                }
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.info("Service worker connection completed.");
+            });
+        }
+        showNotification(settings, id) {
+            var _a;
+            return __awaiter(this, void 0, void 0, function* () {
+                const options = Object.assign({}, settings, { title: undefined, clickInterop: undefined, actions: undefined });
+                options.actions = (_a = settings.actions) === null || _a === void 0 ? void 0 : _a.map((action) => {
+                    return {
+                        action: action.action,
+                        title: action.title,
+                        icon: action.icon
+                    };
+                });
+                const glueData = {
+                    clickInterop: settings.clickInterop,
+                    actions: settings.actions,
+                    id
+                };
+                if (options.data) {
+                    options.data.glueData = glueData;
+                }
+                else {
+                    options.data = { glueData };
+                }
+                yield this.serviceWorkerRegistration.showNotification(settings.title, options);
+            });
+        }
+        notifyReady() {
+            if (this._serviceWorkerRegistration) {
+                this.channel.postMessage({ platformStarted: true });
+            }
+        }
+        onNotificationClick(callback) {
+            return this.registry.add("notification-click", callback);
+        }
+        setUpBroadcastChannelConnection() {
+            this.channel = new BroadcastChannel(serviceWorkerBroadcastChannelName);
+            this.channel.addEventListener("message", (event) => __awaiter(this, void 0, void 0, function* () {
+                var _a;
+                const eventData = event.data;
+                const messageType = eventData === null || eventData === void 0 ? void 0 : eventData.messageType;
+                if (!messageType) {
+                    return;
+                }
+                if (messageType === "ping") {
+                    this.channel.postMessage({ pong: true });
+                    return;
+                }
+                if (messageType === "notificationClick") {
+                    const action = eventData.action;
+                    const glueData = eventData.glueData;
+                    const definition = eventData.definition;
+                    this.registry.execute("notification-click", { action, glueData, definition });
+                    return;
+                }
+                if (messageType === "notificationError") {
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.error(`Service worker error when raising notification: ${eventData.error}`);
+                    return;
+                }
+            }));
+        }
+        registerWorker(workerUrl) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!("serviceWorker" in navigator)) {
+                    (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(`A defined service worker has not been registered at ${workerUrl} because this browser does not support it.`);
+                    return;
+                }
+                try {
+                    const registration = yield navigator.serviceWorker.register(workerUrl);
+                    return registration;
+                }
+                catch (error) {
+                    const stringError = typeof error === "string" ? error : JSON.stringify(error.message);
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.warn(stringError);
+                }
+            });
+        }
+        waitRegistration(registrationPromise) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (typeof registrationPromise.then !== "function" || typeof registrationPromise.catch !== "function") {
+                    throw new Error("The provided service worker registration promise is not a promise");
+                }
+                const registration = yield registrationPromise;
+                if (typeof registration.showNotification !== "function") {
+                    throw new Error("The provided registration promise is a promise, but it resolved with an object which does not appear to be a ServiceWorkerRegistration");
+                }
+                return registration;
+            });
+        }
+    }
+
+    const notificationsOperationDecoder = oneOf$1(constant$1("raiseNotification"), constant$1("requestPermission"));
+    const interopActionSettingsDecoder$1 = object$1({
+        method: nonEmptyStringDecoder$1,
+        arguments: optional$1(anyJson$1()),
+        target: optional$1(oneOf$1(constant$1("all"), constant$1("best")))
+    });
+    const glue42NotificationActionDecoder$1 = object$1({
+        action: string$1(),
+        title: nonEmptyStringDecoder$1,
+        icon: optional$1(string$1()),
+        interop: optional$1(interopActionSettingsDecoder$1)
+    });
+    const glue42NotificationOptionsDecoder$1 = object$1({
+        title: nonEmptyStringDecoder$1,
+        clickInterop: optional$1(interopActionSettingsDecoder$1),
+        actions: optional$1(array$1(glue42NotificationActionDecoder$1)),
+        badge: optional$1(string$1()),
+        body: optional$1(string$1()),
+        data: optional$1(anyJson$1()),
+        dir: optional$1(oneOf$1(constant$1("auto"), constant$1("ltr"), constant$1("rtl"))),
+        icon: optional$1(string$1()),
+        image: optional$1(string$1()),
+        lang: optional$1(string$1()),
+        renotify: optional$1(boolean$1()),
+        requireInteraction: optional$1(boolean$1()),
+        silent: optional$1(boolean$1()),
+        tag: optional$1(string$1()),
+        timestamp: optional$1(nonNegativeNumberDecoder$1),
+        vibrate: optional$1(array$1(number$1()))
+    });
+    const raiseNotificationDecoder$1 = object$1({
+        settings: glue42NotificationOptionsDecoder$1,
+        id: nonEmptyStringDecoder$1
+    });
+    const permissionRequestResultDecoder$1 = object$1({
+        permissionGranted: boolean$1()
+    });
+
+    class NotificationsController$1 {
+        constructor(glueController, serviceWorkerController) {
+            this.glueController = glueController;
+            this.serviceWorkerController = serviceWorkerController;
+            this.started = false;
+            this.operations = {
+                raiseNotification: { name: "raiseNotification", execute: this.handleRaiseNotification.bind(this), dataDecoder: raiseNotificationDecoder$1 },
+                requestPermission: { name: "requestPermission", resultDecoder: permissionRequestResultDecoder$1, execute: this.handleRequestPermission.bind(this) }
+            };
+        }
+        get logger() {
+            return logger.get("notifications.controller");
+        }
+        start() {
+            return __awaiter(this, void 0, void 0, function* () {
+                this.started = true;
+                this.serviceWorkerController.onNotificationClick(this.handleNotificationClick.bind(this));
+            });
+        }
+        handleNotificationClick(clickData) {
+            var _a, _b, _c, _d, _e, _f, _g, _h;
+            if (!clickData.action && ((_a = clickData.glueData) === null || _a === void 0 ? void 0 : _a.clickInterop)) {
+                this.callDefinedInterop((_b = clickData.glueData) === null || _b === void 0 ? void 0 : _b.clickInterop);
+            }
+            if (clickData.action && ((_d = (_c = clickData.glueData) === null || _c === void 0 ? void 0 : _c.actions) === null || _d === void 0 ? void 0 : _d.some((actionDef) => actionDef.action === clickData.action))) {
+                const notificationInteropAction = (_f = (_e = clickData.glueData) === null || _e === void 0 ? void 0 : _e.actions) === null || _f === void 0 ? void 0 : _f.find((action) => action.action === clickData.action);
+                if (notificationInteropAction.interop) {
+                    this.callDefinedInterop(notificationInteropAction.interop);
+                }
+            }
+            if ((_g = clickData.definition.data) === null || _g === void 0 ? void 0 : _g.glueData) {
+                delete clickData.definition.data.glueData;
+            }
+            const notificationEventPayload = {
+                definition: clickData.definition,
+                action: clickData.action,
+                id: (_h = clickData.glueData) === null || _h === void 0 ? void 0 : _h.id
+            };
+            this.glueController.pushSystemMessage("notifications", "notificationClick", notificationEventPayload);
+        }
+        handleControl(args) {
+            var _a, _b, _c, _d;
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!this.started) ;
+                const notificationsData = args.data;
+                const commandId = args.commandId;
+                const operationValidation = notificationsOperationDecoder.run(args.operation);
+                if (!operationValidation.ok) {
+                    throw new Error(`This notifications request cannot be completed, because the operation name did not pass validation: ${JSON.stringify(operationValidation.error)}`);
+                }
+                const operationName = operationValidation.result;
+                const incomingValidation = (_a = this.operations[operationName].dataDecoder) === null || _a === void 0 ? void 0 : _a.run(notificationsData);
+                if (incomingValidation && !incomingValidation.ok) {
+                    throw new Error(`Notifications request for ${operationName} rejected, because the provided arguments did not pass the validation: ${JSON.stringify(incomingValidation.error)}`);
+                }
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.debug(`[${commandId}] ${operationName} command is valid with data: ${JSON.stringify(notificationsData)}`);
+                const result = yield this.operations[operationName].execute(notificationsData, commandId);
+                const resultValidation = (_c = this.operations[operationName].resultDecoder) === null || _c === void 0 ? void 0 : _c.run(result);
+                if (resultValidation && !resultValidation.ok) {
+                    throw new Error(`Notifications request for ${operationName} could not be completed, because the operation result did not pass the validation: ${JSON.stringify(resultValidation.error)}`);
+                }
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] ${operationName} command was executed successfully`);
+                return result;
+            });
+        }
+        handleRaiseNotification({ settings, id }, commandId) {
+            var _a, _b, _c, _d;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling a raise notification message with a title: ${settings.title}`);
+                const hasDefinedActions = settings.actions && settings.actions.length;
+                if (hasDefinedActions) {
+                    (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] notification with a title: ${settings.title} was found to be persistent and therefore the service worker will be instructed to raise it.`);
+                    yield this.serviceWorkerController.showNotification(settings, id);
+                }
+                else {
+                    (_c = this.logger) === null || _c === void 0 ? void 0 : _c.trace(`[${commandId}] notification with a title: ${settings.title} was found to be non-persistent and therefore will be raised with the native notifications API`);
+                    this.raiseSimpleNotification(settings, id);
+                }
+                const definition = Object.assign({}, settings, { title: undefined, clickInterop: undefined, actions: undefined });
+                const notificationEventPayload = { definition, id };
+                setTimeout(() => this.glueController.pushSystemMessage("notifications", "notificationShow", notificationEventPayload), 0);
+                (_d = this.logger) === null || _d === void 0 ? void 0 : _d.trace(`[${commandId}] notification with a title: ${settings.title} was successfully raised`);
+            });
+        }
+        handleRequestPermission(_, commandId) {
+            var _a, _b;
+            return __awaiter(this, void 0, void 0, function* () {
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.trace(`[${commandId}] handling a request permission message`);
+                const permissionValue = yield Notification.requestPermission();
+                const permissionGranted = permissionValue === "granted";
+                (_b = this.logger) === null || _b === void 0 ? void 0 : _b.trace(`[${commandId}] permission for raising notifications is: ${permissionValue}`);
+                return { permissionGranted };
+            });
+        }
+        callDefinedInterop(interopConfig) {
+            const method = interopConfig.method;
+            const args = interopConfig.arguments;
+            const target = interopConfig.target;
+            this.glueController.invokeMethod(method, args, target)
+                .catch((err) => {
+                var _a;
+                const stringError = typeof err === "string" ? err : JSON.stringify(err.message);
+                (_a = this.logger) === null || _a === void 0 ? void 0 : _a.warn(`The interop invocation defined in the clickInterop was rejected, reason: ${stringError}`);
+            });
+        }
+        raiseSimpleNotification(settings, id) {
+            const options = Object.assign({}, settings, { title: undefined, clickInterop: undefined });
+            const notification = new Notification(settings.title, options);
+            notification.onclick = (event) => {
+                const glueData = {
+                    id,
+                    clickInterop: settings.clickInterop
+                };
+                const definition = {
+                    badge: event.target.badge,
+                    body: event.target.body,
+                    data: event.target.data,
+                    dir: event.target.dir,
+                    icon: event.target.icon,
+                    image: event.target.image,
+                    lang: event.target.lang,
+                    renotify: event.target.renotify,
+                    requireInteraction: event.target.requireInteraction,
+                    silent: event.target.silent,
+                    tag: event.target.tag,
+                    timestamp: event.target.timestamp,
+                    vibrate: event.target.vibrate
+                };
+                this.handleNotificationClick({ action: "", glueData, definition });
+            };
+        }
+    }
+
     class IoC$1 {
         constructor(config) {
             this.config = config;
@@ -26941,7 +28590,7 @@
         }
         get controller() {
             if (!this._mainController) {
-                this._mainController = new PlatformController(this.glueController, this.windowsController, this.applicationsController, this.layoutsController, this.workspacesController, this.intentsController, this.channelsController, this.portsBridge, this.stateController);
+                this._mainController = new PlatformController(this.systemController, this.glueController, this.windowsController, this.applicationsController, this.layoutsController, this.workspacesController, this.intentsController, this.channelsController, this.notificationsController, this.portsBridge, this.stateController, this.serviceWorkerController);
             }
             return this._mainController;
         }
@@ -26951,6 +28600,12 @@
             }
             return this._glueController;
         }
+        get systemController() {
+            if (!this._systemController) {
+                this._systemController = new SystemController$1();
+            }
+            return this._systemController;
+        }
         get sessionController() {
             if (!this._sessionController) {
                 this._sessionController = new SessionStorageController();
@@ -26959,7 +28614,7 @@
         }
         get stateController() {
             if (!this._stateChecker) {
-                this._stateChecker = new StateController(this.sessionController);
+                this._stateChecker = new WindowsStateController(this.sessionController);
             }
             return this._stateChecker;
         }
@@ -26971,9 +28626,21 @@
         }
         get applicationsController() {
             if (!this._applicationsController) {
-                this._applicationsController = new ApplicationsController(this.glueController, this.sessionController, this.stateController, this);
+                this._applicationsController = new ApplicationsController(this.glueController, this.sessionController, this.stateController, this.appDirectory, this);
             }
             return this._applicationsController;
+        }
+        get appDirectory() {
+            if (!this._appDirectory) {
+                this._appDirectory = new AppDirectory(this.sessionController, this.remoteWatcher);
+            }
+            return this._appDirectory;
+        }
+        get remoteWatcher() {
+            if (!this._remoteWatcher) {
+                this._remoteWatcher = new RemoteWatcher();
+            }
+            return this._remoteWatcher;
         }
         get layoutsController() {
             if (!this._layoutsController) {
@@ -26983,13 +28650,19 @@
         }
         get workspacesController() {
             if (!this._workspacesController) {
-                this._workspacesController = new WorkspacesController(this.framesController, this.glueController, this.stateController, this);
+                this._workspacesController = new WorkspacesController(this.framesController, this.glueController, this.stateController, this.hibernationWatcher, this);
             }
             return this._workspacesController;
         }
+        get hibernationWatcher() {
+            if (!this._hibernationWatcher) {
+                this._hibernationWatcher = new WorkspaceHibernationWatcher(this.sessionController);
+            }
+            return this._hibernationWatcher;
+        }
         get intentsController() {
             if (!this._intentsController) {
-                this._intentsController = new IntentsController$1(this.glueController, this.sessionController, this);
+                this._intentsController = new IntentsController$1(this.glueController, this.appDirectory, this);
             }
             return this._intentsController;
         }
@@ -26998,6 +28671,12 @@
                 this._channelsController = new ChannelsController$1(this.glueController);
             }
             return this._channelsController;
+        }
+        get notificationsController() {
+            if (!this._notificationsController) {
+                this._notificationsController = new NotificationsController$1(this.glueController, this.serviceWorkerController);
+            }
+            return this._notificationsController;
         }
         get framesController() {
             if (!this._framesController) {
@@ -27017,6 +28696,12 @@
             }
             return this._portsBridge;
         }
+        get serviceWorkerController() {
+            if (!this._serviceWorkerController) {
+                this._serviceWorkerController = new ServiceWorkerController();
+            }
+            return this._serviceWorkerController;
+        }
         createMessageChannel() {
             return new MessageChannel();
         }
@@ -27026,7 +28711,8 @@
         if (window.glue42gd) {
             return fallbackToEnterprise(config);
         }
-        if (config === null || config === void 0 ? void 0 : config.clientOnly) {
+        const isOpenerGlue = yield checkIsOpenerGlue();
+        if ((config === null || config === void 0 ? void 0 : config.clientOnly) || isOpenerGlue) {
             const glue = (config === null || config === void 0 ? void 0 : config.glueFactory) ?
                 yield (config === null || config === void 0 ? void 0 : config.glueFactory(config === null || config === void 0 ? void 0 : config.glue)) :
                 yield glueWebFactory(config === null || config === void 0 ? void 0 : config.glue);
@@ -27040,6 +28726,9 @@
 
     if (typeof window !== "undefined") {
         window.GlueWebPlatform = glueWebPlatformFactory;
+    }
+    if (!window.glue42gd && !window.glue42core) {
+        window.glue42core = { webStarted: false };
     }
 
     return glueWebPlatformFactory;

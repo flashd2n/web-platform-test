@@ -4,9 +4,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="./manifest.json" />
     <title>Main</title>
     <script src="./platform.web.umd.js"></script>
     <script src="./workspaces.umd.js"></script>
+    <script src="./jpm.core.umd.js"></script>
+    <script src="./jpm.entitlements.umd.js"></script>
+    <script src="./plugin.js"></script>
 </head>
 
 <body>
@@ -25,7 +29,18 @@
                 type: "window",
                 title: "SimpleOne",
                 details: {
-                    url: "http://localhost:9200/"
+                    url: "http://localhost:9100/"
+                },
+                customProperties: {
+                    includeInWorkspaces: true
+                }
+            },
+            {
+                name: "symphony",
+                type: "window",
+                title: "symphony",
+                details: {
+                    url: "https://66494.p.symphony.com/"
                 },
                 customProperties: {
                     includeInWorkspaces: true
@@ -33,7 +48,6 @@
             }
         ]
     }
-
 
     // POSSIBLE LAYOUTS CONFIG:
 
@@ -88,38 +102,61 @@
     //             name: "first-plugin",
     //             config: { test: 42 },
     //             start: (glue, config) => {
-    //                 // WebSocket
-    //                 // fetch
-    //                 // glue
-    //                 console.log("works believe me");
-    //                 console.log(config);
-    //                 console.log(glue.appManager.applications());
+    //                 glue.interop.register("asd", () => console.log("42"));
     //             }
     //         }
     //     ]
     // };
 
+    const swPromise = navigator.serviceWorker.register('/service-worker.js');
+
+    const plugins = {
+        definitions: [
+            {
+                name: "notifications",
+                start: window.notificationPluginStart,
+                config: { sw: swPromise }
+            }
+        ]
+    };
+
     const config = {
         glue: {
             libraries: [GlueWorkspaces],
-            systemLogger: { level: "debug" }, // you can set this to trace for maximum console output,
+            systemLogger: { level: "warn" }, // you can set this to trace for maximum console output,
+            notifications: {
+                defaultClick: (glue, data) => {
+                    glue.appManager.application("SimpleOne").start();
+                    console.log(glue.version);
+                    console.log(data);
+                },
+                actionClicks: [
+                    { action: "One", handler: (glue, data) => console.log(data) }
+                ]
+            }
         },
         layouts,
         applications,
         workspaces: {
-            src: "http://localhost:9300"
+            src: "http://localhost:9300",
+            frameCache: true
+        },
+        plugins,
+        serviceWorker: {
+            url: "/service-worker.js"
+        },
+        environment: {
+            region: "EMEA"
         }
-    }
+    };
 
     GlueWebPlatform(config)
         .then((data) => {
             window.glue = data.glue;
-            console.log("done");
+            // return notificationPluginStart(data.glue, { sw: swPromise });
         })
-        .then(() => console.log("test done"))
-        .catch((err) => {
-            console.warn(err);
-        });
+        .then(() => console.log("done"))
+        .catch(console.warn);
 </script>
 
 </html>

@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="./manifest.json" />
     <title>Client A</title>
     <script src="./web.umd.js"></script>
     <!-- <script src="./workspaces.umd.js"></script> -->
@@ -12,25 +13,46 @@
             background-color: palegoldenrod;
         }
     </style>
+    <script src="./index.js"></script>
 </head>
 
-<iframe class="border rounded flex-grow-1" src="http://localhost:9200"></iframe>
+<!-- <iframe class="border rounded flex-grow-1" src="http://localhost:9200"></iframe> -->
 
 <body>
     <h1>Client A</h1>
-</body>
-<script>
-    // const config = {
-    //     libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
-    //     systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
-    // };
+    <script>
+        // console.log(`I have gosho?: ${window.gosho}`);
+        // console.log("do I have glue?");
+        // console.log(window.fdc3);
+        // //     console.log("runtime?");
+        // //     console.log(chrome.runtime);
+        // setTimeout(() => {
+        //     console.log("do I have glue now?");
+        //     console.log(window.fdc3);
+        // }, 5000);
 
-    GlueWeb()
-        .then((glue) => {
-            window.glue = glue;
-            console.log("done");
-        })
-        .catch(console.warn);
-</script>
+        // window.addEventListener("message", (e) => {
+        //     console.log("got something in page");
+        //     console.log(e);
+        // });
+
+        // setInterval(() => {
+        //     console.log("sending");
+        //     window.postMessage({ type: "itisme" });
+        // }, 1000);
+        // const config = {
+        //     libraries: [GlueWorkspaces], // this is how you enable the workspaces API, just like in V1
+        //     systemLogger: { level: "warn" }, // you can set this to trace for maximum console output
+        // };
+        // const swPromise = navigator.serviceWorker.register('/service-worker.js');
+
+        GlueWeb()
+            .then((glue) => {
+                // window.glue = glue;
+                console.log("done");
+            })
+            .catch(console.warn);
+    </script>
+</body>
 
 </html>

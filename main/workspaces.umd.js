@@ -917,6 +917,7 @@
 
     const nonEmptyStringDecoder = string().where((s) => s.length > 0, "Expected a non-empty string");
     const nonNegativeNumberDecoder = number().where((num) => num >= 0, "Expected a non-negative number");
+    const positiveNumberDecoder = number().where((num) => num > 0, "Expected a positive number");
     const isWindowInSwimlaneResultDecoder = object({
         inWorkspace: boolean()
     });
@@ -938,26 +939,72 @@
     const deleteLayoutConfigDecoder = object({
         name: nonEmptyStringDecoder
     });
+    const windowDefinitionConfigDecoder = object({
+        minWidth: optional(number()),
+        maxWidth: optional(number()),
+        minHeight: optional(number()),
+        maxHeight: optional(number()),
+        allowExtract: optional(boolean()),
+        showCloseButton: optional(boolean())
+    });
+    const groupDefinitionConfigDecoder = object({
+        minWidth: optional(number()),
+        maxWidth: optional(number()),
+        minHeight: optional(number()),
+        maxHeight: optional(number()),
+        allowExtract: optional(boolean()),
+        allowDrop: optional(boolean()),
+        showMaximizeButton: optional(boolean()),
+        showEjectButton: optional(boolean()),
+        showAddWindowButton: optional(boolean())
+    });
+    const rowDefinitionConfigDecoder = object({
+        minHeight: optional(number()),
+        maxHeight: optional(number()),
+        allowDrop: optional(boolean()),
+        isPinned: optional(boolean())
+    });
+    const columnDefinitionConfigDecoder = object({
+        minWidth: optional(number()),
+        maxWidth: optional(number()),
+        allowDrop: optional(boolean()),
+        isPinned: optional(boolean())
+    });
     const swimlaneWindowDefinitionDecoder = object({
         type: optional(constant("window")),
         appName: optional(nonEmptyStringDecoder),
         windowId: optional(nonEmptyStringDecoder),
-        context: optional(anyJson())
+        context: optional(anyJson()),
+        config: optional(windowDefinitionConfigDecoder)
     });
     const strictSwimlaneWindowDefinitionDecoder = object({
         type: constant("window"),
         appName: optional(nonEmptyStringDecoder),
         windowId: optional(nonEmptyStringDecoder),
-        context: optional(anyJson())
+        context: optional(anyJson()),
+        config: optional(windowDefinitionConfigDecoder)
     });
     const parentDefinitionDecoder = optional(object({
         type: optional(subParentDecoder),
-        children: optional(lazy(() => array(oneOf(swimlaneWindowDefinitionDecoder, parentDefinitionDecoder))))
+        children: optional(lazy(() => array(oneOf(swimlaneWindowDefinitionDecoder, parentDefinitionDecoder)))),
+        config: optional(anyJson())
     }));
-    const strictParentDefinitionDecoder = object({
-        type: subParentDecoder,
-        children: optional(lazy(() => array(oneOf(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder))))
+    const strictColumnDefinitionDecoder = object({
+        type: constant("column"),
+        children: optional(lazy(() => array(oneOf(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder)))),
+        config: optional(columnDefinitionConfigDecoder)
     });
+    const strictRowDefinitionDecoder = object({
+        type: constant("row"),
+        children: optional(lazy(() => array(oneOf(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder)))),
+        config: optional(rowDefinitionConfigDecoder)
+    });
+    const strictGroupDefinitionDecoder = object({
+        type: constant("group"),
+        children: optional(lazy(() => array(oneOf(strictSwimlaneWindowDefinitionDecoder, strictParentDefinitionDecoder)))),
+        config: optional(groupDefinitionConfigDecoder)
+    });
+    const strictParentDefinitionDecoder = oneOf(strictGroupDefinitionDecoder, strictColumnDefinitionDecoder, strictRowDefinitionDecoder);
     const stateDecoder = oneOf(string().where((s) => s.toLowerCase() === "maximized", "Expected a case insensitive variation of 'maximized'"), string().where((s) => s.toLowerCase() === "normal", "Expected a case insensitive variation of 'normal'"));
     const newFrameConfigDecoder = object({
         bounds: optional(object({
@@ -967,11 +1014,11 @@
             height: optional(nonNegativeNumberDecoder)
         }))
     });
-    const restoreTypeDecoder = oneOf(constant("direct"), constant("delayed"), constant("lazy"));
+    const loadingStrategyDecoder = oneOf(constant("direct"), constant("delayed"), constant("lazy"));
     const restoreWorkspaceConfigDecoder = optional(object({
         app: optional(nonEmptyStringDecoder),
         context: optional(anyJson()),
-        restoreType: optional(restoreTypeDecoder),
+        loadingStrategy: optional(loadingStrategyDecoder),
         title: optional(nonEmptyStringDecoder),
         reuseWorkspaceId: optional(nonEmptyStringDecoder),
         frameId: optional(nonEmptyStringDecoder),
@@ -993,7 +1040,20 @@
             position: optional(nonNegativeNumberDecoder),
             isFocused: optional(boolean()),
             noTabHeader: optional(boolean()),
-            reuseWorkspaceId: optional(nonEmptyStringDecoder)
+            reuseWorkspaceId: optional(nonEmptyStringDecoder),
+            loadingStrategy: optional(loadingStrategyDecoder),
+            allowDrop: optional(boolean()),
+            allowDropLeft: optional(boolean()),
+            allowDropTop: optional(boolean()),
+            allowDropRight: optional(boolean()),
+            allowDropBottom: optional(boolean()),
+            allowExtract: optional(boolean()),
+            showSaveButton: optional(boolean()),
+            showCloseButton: optional(boolean()),
+            allowSplitters: optional(boolean()),
+            showWindowCloseButtons: optional(boolean()),
+            showEjectButtons: optional(boolean()),
+            showAddWindowButtons: optional(boolean())
         })),
         frame: optional(object({
             reuseFrameId: optional(nonEmptyStringDecoder),
@@ -1041,12 +1101,36 @@
         title: nonEmptyStringDecoder,
         positionIndex: nonNegativeNumberDecoder,
         name: nonEmptyStringDecoder,
-        layoutName: optional(nonEmptyStringDecoder)
+        layoutName: optional(nonEmptyStringDecoder),
+        isHibernated: optional(boolean()),
+        isSelected: optional(boolean()),
+        allowDrop: optional(boolean()),
+        allowExtract: optional(boolean()),
+        allowSplitters: optional(boolean()),
+        showCloseButton: optional(boolean()),
+        showSaveButton: optional(boolean()),
+        allowDropLeft: optional(boolean()),
+        allowDropTop: optional(boolean()),
+        allowDropRight: optional(boolean()),
+        allowDropBottom: optional(boolean()),
+        minWidth: optional(number()),
+        maxWidth: optional(number()),
+        minHeight: optional(number()),
+        maxHeight: optional(number()),
+        showAddWindowButtons: optional(boolean()),
+        showEjectButtons: optional(boolean()),
+        showWindowCloseButtons: optional(boolean()),
+        widthInPx: optional(number()),
+        heightInPx: optional(number())
     });
     const baseChildSnapshotConfigDecoder = object({
         frameId: nonEmptyStringDecoder,
         workspaceId: nonEmptyStringDecoder,
-        positionIndex: number()
+        positionIndex: number(),
+        minWidth: optional(number()),
+        maxWidth: optional(number()),
+        minHeight: optional(number()),
+        maxHeight: optional(number())
     });
     const parentSnapshotConfigDecoder = anyJson();
     const swimlaneWindowSnapshotConfigDecoder = intersection(baseChildSnapshotConfigDecoder, object({
@@ -1054,32 +1138,47 @@
         isMaximized: optional(boolean()),
         isFocused: boolean(),
         title: optional(string()),
-        appName: optional(nonEmptyStringDecoder)
+        appName: optional(nonEmptyStringDecoder),
+        allowExtract: optional(boolean()),
+        showCloseButton: optional(boolean()),
+        minWidth: optional(number()),
+        minHeigth: optional(number()),
+        maxWidth: optional(number()),
+        maxHeight: optional(number()),
+        widthInPx: optional(number()),
+        heightInPx: optional(number())
     }));
-    const childSnapshotResultDecoder = object({
-        id: nonEmptyStringDecoder,
-        config: oneOf(parentSnapshotConfigDecoder, swimlaneWindowSnapshotConfigDecoder),
-        children: optional(lazy(() => array(childSnapshotResultDecoder))),
-        type: oneOf(constant("window"), constant("row"), constant("column"), constant("group"))
+    const customWorkspaceSubParentSnapshotDecoder = object({
+        id: optional(nonEmptyStringDecoder),
+        config: parentSnapshotConfigDecoder,
+        children: optional(lazy(() => array(customWorkspaceChildSnapshotDecoder))),
+        type: oneOf(constant("row"), constant("column"), constant("group"))
     });
+    const customWorkspaceWindowSnapshotDecoder = object({
+        id: optional(nonEmptyStringDecoder),
+        config: swimlaneWindowSnapshotConfigDecoder,
+        type: constant("window")
+    });
+    const customWorkspaceChildSnapshotDecoder = oneOf(customWorkspaceWindowSnapshotDecoder, customWorkspaceSubParentSnapshotDecoder);
+    const childSnapshotResultDecoder = customWorkspaceChildSnapshotDecoder;
     const workspaceSnapshotResultDecoder = object({
         id: nonEmptyStringDecoder,
         config: workspaceConfigResultDecoder,
         children: array(childSnapshotResultDecoder),
         frameSummary: frameSummaryDecoder
     });
-    const customWorkspaceChildSnapshotDecoder = object({
-        id: optional(nonEmptyStringDecoder),
-        config: oneOf(parentSnapshotConfigDecoder, swimlaneWindowSnapshotConfigDecoder),
-        children: optional(lazy(() => array(customWorkspaceChildSnapshotDecoder))),
-        type: oneOf(constant("window"), constant("row"), constant("column"), constant("group"))
-    });
     const windowLayoutItemDecoder = object({
         type: constant("window"),
         config: object({
             appName: nonEmptyStringDecoder,
             url: optional(nonEmptyStringDecoder),
-            title: optional(string())
+            title: optional(string()),
+            allowExtract: optional(boolean()),
+            showCloseButton: optional(boolean()),
+            minWidth: optional(number()),
+            minHeigth: optional(number()),
+            maxWidth: optional(number()),
+            maxHeight: optional(number())
         })
     });
     const groupLayoutItemDecoder = object({
@@ -1148,9 +1247,17 @@
     const frameStateResultDecoder = object({
         state: frameStateDecoder
     });
+    const frameBoundsResultDecoder = object({
+        bounds: object({
+            top: number(),
+            left: number(),
+            width: nonNegativeNumberDecoder,
+            height: nonNegativeNumberDecoder
+        })
+    });
     const resizeConfigDecoder = object({
-        width: optional(nonNegativeNumberDecoder),
-        height: optional(nonNegativeNumberDecoder),
+        width: optional(positiveNumberDecoder),
+        height: optional(positiveNumberDecoder),
         relative: optional(boolean())
     });
     const moveConfigDecoder = object({
@@ -1226,6 +1333,64 @@
         workspaceId: nonEmptyStringDecoder,
         saveContext: optional(boolean())
     });
+    const workspaceSelectorDecoder = object({
+        workspaceId: nonEmptyStringDecoder,
+    });
+    const workspaceLockConfigDecoder = object({
+        allowDrop: optional(boolean()),
+        allowDropLeft: optional(boolean()),
+        allowDropTop: optional(boolean()),
+        allowDropRight: optional(boolean()),
+        allowDropBottom: optional(boolean()),
+        allowExtract: optional(boolean()),
+        allowSplitters: optional(boolean()),
+        showCloseButton: optional(boolean()),
+        showSaveButton: optional(boolean()),
+        showWindowCloseButtons: optional(boolean()),
+        showAddWindowButtons: optional(boolean()),
+        showEjectButtons: optional(boolean()),
+    });
+    const lockWorkspaceDecoder = object({
+        workspaceId: nonEmptyStringDecoder,
+        config: optional(workspaceLockConfigDecoder)
+    });
+    const windowLockConfigDecoder = object({
+        allowExtract: optional(boolean()),
+        showCloseButton: optional(boolean())
+    });
+    const lockWindowDecoder = object({
+        windowPlacementId: nonEmptyStringDecoder,
+        config: optional(windowLockConfigDecoder)
+    });
+    const rowLockConfigDecoder = object({
+        allowDrop: optional(boolean()),
+    });
+    const columnLockConfigDecoder = object({
+        allowDrop: optional(boolean()),
+    });
+    const groupLockConfigDecoder = object({
+        allowExtract: optional(boolean()),
+        allowDrop: optional(boolean()),
+        showMaximizeButton: optional(boolean()),
+        showEjectButton: optional(boolean()),
+        showAddWindowButton: optional(boolean()),
+    });
+    const lockRowDecoder = object({
+        itemId: nonEmptyStringDecoder,
+        type: constant("row"),
+        config: optional(rowLockConfigDecoder)
+    });
+    const lockColumnDecoder = object({
+        itemId: nonEmptyStringDecoder,
+        type: constant("column"),
+        config: optional(columnLockConfigDecoder)
+    });
+    const lockGroupDecoder = object({
+        itemId: nonEmptyStringDecoder,
+        type: constant("group"),
+        config: optional(groupLockConfigDecoder)
+    });
+    const lockContainerDecoder = oneOf(lockRowDecoder, lockColumnDecoder, lockGroupDecoder);
 
     const webPlatformMethodName = "T42.Web.Platform.Control";
     const webPlatformWspStreamName = "T42.Web.Platform.WSP.Stream";
@@ -1263,6 +1428,7 @@
         resizeItem: { name: "resizeItem", argsDecoder: resizeItemConfigDecoder, resultDecoder: voidResultDecoder },
         changeFrameState: { name: "changeFrameState", argsDecoder: frameStateConfigDecoder, resultDecoder: voidResultDecoder },
         getFrameState: { name: "getFrameState", argsDecoder: simpleItemConfigDecoder, resultDecoder: frameStateResultDecoder },
+        getFrameBounds: { name: "getFrameBounds", argsDecoder: simpleItemConfigDecoder, resultDecoder: frameBoundsResultDecoder },
         moveFrame: { name: "moveFrame", argsDecoder: moveFrameConfigDecoder, resultDecoder: voidResultDecoder },
         getFrameSnapshot: { name: "getFrameSnapshot", argsDecoder: simpleItemConfigDecoder, resultDecoder: frameSnapshotResultDecoder },
         forceLoadWindow: { name: "forceLoadWindow", argsDecoder: simpleItemConfigDecoder, resultDecoder: simpleWindowOperationSuccessResultDecoder },
@@ -1271,7 +1437,12 @@
         moveWindowTo: { name: "moveWindowTo", argsDecoder: moveWindowConfigDecoder, resultDecoder: voidResultDecoder },
         addWindow: { name: "addWindow", argsDecoder: addWindowConfigDecoder, resultDecoder: addItemResultDecoder },
         addContainer: { name: "addContainer", argsDecoder: addContainerConfigDecoder, resultDecoder: addItemResultDecoder },
-        bundleWorkspace: { name: "bundleWorkspace", argsDecoder: bundleConfigDecoder, resultDecoder: voidResultDecoder }
+        bundleWorkspace: { name: "bundleWorkspace", argsDecoder: bundleConfigDecoder, resultDecoder: voidResultDecoder },
+        hibernateWorkspace: { name: "hibernateWorkspace", argsDecoder: workspaceSelectorDecoder, resultDecoder: voidResultDecoder },
+        resumeWorkspace: { name: "resumeWorkspace", argsDecoder: workspaceSelectorDecoder, resultDecoder: voidResultDecoder },
+        lockWorkspace: { name: "lockWorkspace", argsDecoder: lockWorkspaceDecoder, resultDecoder: voidResultDecoder },
+        lockWindow: { name: "lockWindow", argsDecoder: lockWindowDecoder, resultDecoder: voidResultDecoder },
+        lockContainer: { name: "lockContainer", argsDecoder: lockContainerDecoder, resultDecoder: voidResultDecoder }
     };
 
     class Bridge {
@@ -1318,7 +1489,7 @@
                         operationDefinition.argsDecoder.runWithException(operationArgs);
                     }
                     catch (error) {
-                        throw new Error(`Unexpected internal outgoing validation error: ${error.message}, for input: ${JSON.stringify(error.input)}`);
+                        throw new Error(`Unexpected internal outgoing validation error: ${error.message}, for input: ${JSON.stringify(error.input)}, for operation ${operationName}`);
                     }
                 }
                 let operationResult;
@@ -1328,7 +1499,7 @@
                 }
                 catch (error) {
                     if (error.kind) {
-                        throw new Error(`Unexpected internal incoming validation error: ${error.message}, for input: ${JSON.stringify(error.input)}`);
+                        throw new Error(`Unexpected internal incoming validation error: ${error.message}, for input: ${JSON.stringify(error.input)}, for operation ${operationName}`);
                     }
                     throw new Error(error.message);
                 }
@@ -1721,6 +1892,30 @@
         get workspace() {
             return getBase(this).getMyWorkspace(this);
         }
+        get allowDrop() {
+            return getBase(this).getAllowDrop(this);
+        }
+        get minWidth() {
+            return getBase(this).getMinWidth(this);
+        }
+        get minHeight() {
+            return getBase(this).getMinHeight(this);
+        }
+        get maxWidth() {
+            return getBase(this).getMaxWidth(this);
+        }
+        get maxHeight() {
+            return getBase(this).getMaxHeight(this);
+        }
+        get width() {
+            return getBase(this).getWidthInPx(this);
+        }
+        get height() {
+            return getBase(this).getHeightInPx(this);
+        }
+        get isPinned() {
+            return getBase(this).getIsPinned(this);
+        }
         addWindow(definition) {
             return getBase(this).addWindow(this, definition, "row");
         }
@@ -1756,6 +1951,26 @@
         }
         close() {
             return getBase(this).close(this);
+        }
+        lock(config) {
+            let lockConfigResult = undefined;
+            if (typeof config === "function") {
+                const currentLockConfig = {
+                    allowDrop: this.allowDrop,
+                };
+                lockConfigResult = config(currentLockConfig);
+            }
+            else {
+                lockConfigResult = config;
+            }
+            const verifiedConfig = lockConfigResult === undefined ? undefined : rowLockConfigDecoder.runWithException(lockConfigResult);
+            return getBase(this).lockContainer(this, verifiedConfig);
+        }
+        setHeight(height) {
+            return __awaiter(this, void 0, void 0, function* () {
+                number().where(n => n > 0, "The value should be positive").runWithException(height);
+                return getBase(this).setHeight(this, height);
+            });
         }
     }
 
@@ -1794,6 +2009,30 @@
         get workspace() {
             return getBase$1(this).getMyWorkspace(this);
         }
+        get allowDrop() {
+            return getBase$1(this).getAllowDrop(this);
+        }
+        get minWidth() {
+            return getBase$1(this).getMinWidth(this);
+        }
+        get minHeight() {
+            return getBase$1(this).getMinHeight(this);
+        }
+        get maxWidth() {
+            return getBase$1(this).getMaxWidth(this);
+        }
+        get maxHeight() {
+            return getBase$1(this).getMaxHeight(this);
+        }
+        get width() {
+            return getBase$1(this).getWidthInPx(this);
+        }
+        get height() {
+            return getBase$1(this).getHeightInPx(this);
+        }
+        get isPinned() {
+            return getBase$1(this).getIsPinned(this);
+        }
         addWindow(definition) {
             return getBase$1(this).addWindow(this, definition, "column");
         }
@@ -1829,6 +2068,26 @@
         }
         close() {
             return getBase$1(this).close(this);
+        }
+        lock(config) {
+            let lockConfigResult = undefined;
+            if (typeof config === "function") {
+                const currentLockConfig = {
+                    allowDrop: this.allowDrop,
+                };
+                lockConfigResult = config(currentLockConfig);
+            }
+            else {
+                lockConfigResult = config;
+            }
+            const verifiedConfig = lockConfigResult === undefined ? undefined : columnLockConfigDecoder.runWithException(lockConfigResult);
+            return getBase$1(this).lockContainer(this, verifiedConfig);
+        }
+        setWidth(width) {
+            return __awaiter(this, void 0, void 0, function* () {
+                number().where(n => n > 0, "The value should be positive").runWithException(width);
+                return getBase$1(this).setWidth(this, width);
+            });
         }
     }
 
@@ -1867,6 +2126,39 @@
         get workspace() {
             return getBase$2(this).getMyWorkspace(this);
         }
+        get allowExtract() {
+            return getBase$2(this).getAllowExtract(this);
+        }
+        get allowDrop() {
+            return getBase$2(this).getAllowDrop(this);
+        }
+        get showMaximizeButton() {
+            return getBase$2(this).getShowMaximizeButton(this);
+        }
+        get showEjectButton() {
+            return getBase$2(this).getShowEjectButton(this);
+        }
+        get showAddWindowButton() {
+            return getBase$2(this).getShowAddWindowButton(this);
+        }
+        get minWidth() {
+            return getBase$2(this).getMinWidth(this);
+        }
+        get minHeight() {
+            return getBase$2(this).getMinHeight(this);
+        }
+        get maxWidth() {
+            return getBase$2(this).getMaxWidth(this);
+        }
+        get maxHeight() {
+            return getBase$2(this).getMaxHeight(this);
+        }
+        get width() {
+            return getBase$2(this).getWidthInPx(this);
+        }
+        get height() {
+            return getBase$2(this).getHeightInPx(this);
+        }
         addWindow(definition) {
             return getBase$2(this).addWindow(this, definition, "group");
         }
@@ -1897,6 +2189,34 @@
         close() {
             return getBase$2(this).close(this);
         }
+        lock(config) {
+            let lockConfigResult = undefined;
+            if (typeof config === "function") {
+                const currentLockConfig = {
+                    allowDrop: this.allowDrop,
+                    allowExtract: this.allowExtract,
+                    showAddWindowButton: this.showAddWindowButton,
+                    showEjectButton: this.showEjectButton,
+                    showMaximizeButton: this.showMaximizeButton
+                };
+                lockConfigResult = config(currentLockConfig);
+            }
+            else {
+                lockConfigResult = config;
+            }
+            const verifiedConfig = lockConfigResult === undefined ? undefined : groupLockConfigDecoder.runWithException(lockConfigResult);
+            return getBase$2(this).lockContainer(this, verifiedConfig);
+        }
+        setSize(width, height) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!width && !height) {
+                    throw new Error("Expected either width or height to be passed}");
+                }
+                optional(number().where(n => n > 0, "The height should be positive")).runWithException(height);
+                optional(number().where(n => n > 0, "The width should be positive")).runWithException(width);
+                return getBase$2(this).setSize(this, width, height);
+            });
+        }
     }
 
     const data = new WeakMap();
@@ -1925,11 +2245,68 @@
         get layoutName() {
             return getData(this).config.layoutName;
         }
+        get isHibernated() {
+            return getData(this).config.isHibernated;
+        }
         get children() {
             return getData(this).children;
         }
         get frame() {
             return getData(this).frame;
+        }
+        get allowSplitters() {
+            return getData(this).config.allowSplitters;
+        }
+        get allowDrop() {
+            return getData(this).config.allowDrop;
+        }
+        get allowDropLeft() {
+            return getData(this).config.allowDropLeft;
+        }
+        get allowDropTop() {
+            return getData(this).config.allowDropTop;
+        }
+        get allowDropRight() {
+            return getData(this).config.allowDropRight;
+        }
+        get allowDropBottom() {
+            return getData(this).config.allowDropBottom;
+        }
+        get allowExtract() {
+            return getData(this).config.allowExtract;
+        }
+        get showCloseButton() {
+            return getData(this).config.showCloseButton;
+        }
+        get showSaveButton() {
+            return getData(this).config.showSaveButton;
+        }
+        get minWidth() {
+            return getData(this).config.minWidth;
+        }
+        get minHeight() {
+            return getData(this).config.minHeight;
+        }
+        get maxWidth() {
+            return getData(this).config.maxWidth;
+        }
+        get maxHeight() {
+            return getData(this).config.maxHeight;
+        }
+        get width() {
+            return getData(this).config.widthInPx;
+        }
+        get height() {
+            return getData(this).config.heightInPx;
+        }
+        get showWindowCloseButtons() {
+            return getData(this).config.showWindowCloseButtons;
+        }
+        get showEjectButtons() {
+            return getData(this).config.showEjectButtons;
+        }
+        get showAddWindowButtons() {
+            return getData(this).config.showAddWindowButtons;
         }
         removeChild(predicate) {
             return __awaiter(this, void 0, void 0, function* () {
@@ -2004,21 +2381,9 @@
         refreshReference() {
             return __awaiter(this, void 0, void 0, function* () {
                 const newSnapshot = (yield getData(this).controller.getSnapshot(this.id, "workspace"));
-                const existingChildren = newSnapshot.children.reduce((foundChildren, child) => {
-                    let foundChild;
-                    if (child.type === "window") {
-                        foundChild = this.getWindow((swimlaneWindow) => swimlaneWindow.id === child.id);
-                    }
-                    else {
-                        foundChild = this.getBox((parent) => parent.id === child.id);
-                    }
-                    if (foundChild) {
-                        foundChildren.push(foundChild);
-                    }
-                    return foundChildren;
-                }, []);
+                const currentChildrenFlat = getData(this).controller.flatChildren(getData(this).children);
                 const newChildren = getData(this).controller.refreshChildren({
-                    existingChildren,
+                    existingChildren: currentChildrenFlat,
                     workspace: this,
                     parent: this,
                     children: newSnapshot.children
@@ -2132,6 +2497,46 @@
                 yield this.refreshReference();
             });
         }
+        hibernate() {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield getData(this).controller.hibernateWorkspace(this.id);
+                yield this.refreshReference();
+            });
+        }
+        resume() {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield getData(this).controller.resumeWorkspace(this.id);
+                yield this.refreshReference();
+            });
+        }
+        lock(config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                let lockConfigResult = undefined;
+                if (typeof config === "function") {
+                    const currentLockConfig = {
+                        allowDrop: this.allowDrop,
+                        allowDropLeft: this.allowDropLeft,
+                        allowDropTop: this.allowDropTop,
+                        allowDropRight: this.allowDropRight,
+                        allowDropBottom: this.allowDropBottom,
+                        allowExtract: this.allowExtract,
+                        allowSplitters: this.allowSplitters,
+                        showCloseButton: this.showCloseButton,
+                        showSaveButton: this.showSaveButton,
+                        showAddWindowButtons: this.showAddWindowButtons,
+                        showEjectButtons: this.showEjectButtons,
+                        showWindowCloseButtons: this.showWindowCloseButtons
+                    };
+                    lockConfigResult = config(currentLockConfig);
+                }
+                else {
+                    lockConfigResult = config;
+                }
+                const verifiedConfig = lockConfigResult === undefined ? undefined : workspaceLockConfigDecoder.runWithException(lockConfigResult);
+                yield getData(this).controller.lockWorkspace(this.id, verifiedConfig);
+                yield this.refreshReference();
+            });
+        }
         onClosed(callback) {
             return __awaiter(this, void 0, void 0, function* () {
                 checkThrowCallback(callback);
@@ -2228,6 +2633,9 @@
         get id() {
             return getData$1(this).config.windowId;
         }
+        get elementId() {
+            return getData$1(this).id;
+        }
         get type() {
             return "window";
         }
@@ -2252,6 +2660,24 @@
         get title() {
             return getData$1(this).config.title;
         }
+        get allowExtract() {
+            return getData$1(this).config.allowExtract;
+        }
+        get showCloseButton() {
+            return getData$1(this).config.showCloseButton;
+        }
+        get minWidth() {
+            return getData$1(this).config.minWidth;
+        }
+        get minHeight() {
+            return getData$1(this).config.minHeight;
+        }
+        get maxWidth() {
+            return getData$1(this).config.maxWidth;
+        }
+        get maxHeight() {
+            return getData$1(this).config.maxHeight;
+        }
         get workspace() {
             return getData$1(this).workspace;
         }
@@ -2264,6 +2690,12 @@
         get appName() {
             return getData$1(this).config.appName;
         }
+        get width() {
+            return getData$1(this).config.widthInPx;
+        }
+        get height() {
+            return getData$1(this).config.heightInPx;
+        }
         forceLoad() {
             return __awaiter(this, void 0, void 0, function* () {
                 if (this.isLoaded) {
@@ -2273,6 +2705,7 @@
                 const itemId = getData$1(this).id;
                 const windowId = yield controller.forceLoadWindow(itemId);
                 getData$1(this).config.windowId = windowId;
+                yield this.workspace.refreshReference();
             });
         }
         focus() {
@@ -2280,6 +2713,7 @@
                 const id = getData$1(this).id;
                 const controller = getData$1(this).controller;
                 yield controller.focusItem(id);
+                yield this.workspace.refreshReference();
             });
         }
         close() {
@@ -2290,6 +2724,7 @@
                 yield getData$1(this)
                     .parent
                     .removeChild((child) => child.id === id);
+                yield this.workspace.refreshReference();
             });
         }
         setTitle(title) {
@@ -2298,6 +2733,7 @@
                 const itemId = getData$1(this).id;
                 const controller = getData$1(this).controller;
                 yield controller.setItemTitle(itemId, title);
+                yield this.workspace.refreshReference();
             });
         }
         maximize() {
@@ -2305,6 +2741,7 @@
                 const id = getData$1(this).id;
                 const controller = getData$1(this).controller;
                 yield controller.maximizeItem(id);
+                yield this.workspace.refreshReference();
             });
         }
         restore() {
@@ -2312,6 +2749,7 @@
                 const id = getData$1(this).id;
                 const controller = getData$1(this).controller;
                 yield controller.restoreItem(id);
+                yield this.workspace.refreshReference();
             });
         }
         eject() {
@@ -2322,6 +2760,7 @@
                 const itemId = getData$1(this).id;
                 const newWindowId = yield getData$1(this).controller.ejectWindow(itemId);
                 getData$1(this).config.windowId = newWindowId;
+                yield this.workspace.refreshReference();
                 return this.getGdWindow();
             });
         }
@@ -2344,7 +2783,44 @@
                 if (!foundParent) {
                     throw new Error("Cannot move the window to the selected parent, because this parent does not exist.");
                 }
-                return controller.moveWindowTo(myId, parent.id);
+                yield controller.moveWindowTo(myId, parent.id);
+                yield this.workspace.refreshReference();
+            });
+        }
+        lock(config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                let lockConfigResult = undefined;
+                if (typeof config === "function") {
+                    const currentLockConfig = {
+                        allowExtract: this.allowExtract,
+                        showCloseButton: this.showCloseButton
+                    };
+                    lockConfigResult = config(currentLockConfig);
+                }
+                else {
+                    lockConfigResult = config;
+                }
+                const verifiedConfig = lockConfigResult === undefined ? undefined : windowLockConfigDecoder.runWithException(lockConfigResult);
+                const windowPlacementId = getData$1(this).id;
+                yield getData$1(this).controller.lockWindow(windowPlacementId, verifiedConfig);
+                yield this.workspace.refreshReference();
+            });
+        }
+        setSize(width, height) {
+            return __awaiter(this, void 0, void 0, function* () {
+                if (!width && !height) {
+                    throw new Error("Expected either width or height to be passed}");
+                }
+                optional(number().where(n => n > 0, "The height should be positive")).runWithException(height);
+                optional(number().where(n => n > 0, "The width should be positive")).runWithException(width);
+                const myId = getData$1(this).id;
+                const controller = getData$1(this).controller;
+                yield controller.resizeItem(myId, {
+                    height,
+                    width,
+                    relative: false
+                });
+                yield this.workspace.refreshReference();
             });
         }
         onRemoved(callback) {
@@ -2378,15 +2854,23 @@
         get id() {
             return getData$2(this).summary.id;
         }
-        resize(config) {
-            const validatedConfig = resizeConfigDecoder.runWithException(config);
+        getBounds() {
             const myId = getData$2(this).summary.id;
-            return getData$2(this).controller.resizeItem(myId, validatedConfig);
+            return getData$2(this).controller.getFrameBounds(myId);
+        }
+        resize(config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const validatedConfig = resizeConfigDecoder.runWithException(config);
+                const myId = getData$2(this).summary.id;
+                return getData$2(this).controller.resizeItem(myId, validatedConfig);
+            });
         }
         move(config) {
-            const validatedConfig = moveConfigDecoder.runWithException(config);
-            const myId = getData$2(this).summary.id;
-            return getData$2(this).controller.moveFrame(myId, validatedConfig);
+            return __awaiter(this, void 0, void 0, function* () {
+                const validatedConfig = moveConfigDecoder.runWithException(config);
+                const myId = getData$2(this).summary.id;
+                return getData$2(this).controller.moveFrame(myId, validatedConfig);
+            });
         }
         focus() {
             const myId = getData$2(this).summary.id;
@@ -2440,6 +2924,13 @@
             return __awaiter(this, void 0, void 0, function* () {
                 const controller = getData$2(this).controller;
                 return controller.getWorkspaces((wsp) => wsp.frameId === this.id);
+            });
+        }
+        constraints() {
+            return __awaiter(this, void 0, void 0, function* () {
+                const controller = getData$2(this).controller;
+                const myId = getData$2(this).summary.id;
+                return controller.getFrameConstraints(myId);
             });
         }
         restoreWorkspace(name, options) {
@@ -2837,6 +3328,124 @@
                 }
             });
         }
+        lockContainer(model, config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const modelData = getData$3(this, model);
+                const controller = getData$3(this, model).controller;
+                yield controller.lockContainer(modelData.id, model.type, config);
+                if (modelData.parent instanceof Workspace) {
+                    yield modelData.parent.refreshReference();
+                }
+                else {
+                    yield this.getMyWorkspace(modelData.parent).refreshReference();
+                }
+            });
+        }
+        getAllowDrop(model) {
+            return getData$3(this, model).config.allowDrop;
+        }
+        getAllowExtract(model) {
+            const privateData = getData$3(this, model);
+            if (privateData.type !== "group") {
+                throw new Error(`Cannot get allow extract from private data${privateData.type} with config ${privateData.type !== "workspace" ? privateData.config.type : ""}`);
+            }
+            return privateData.config.allowExtract;
+        }
+        getShowMaximizeButton(model) {
+            const privateData = getData$3(this, model);
+            if (privateData.type !== "group") {
+                throw new Error(`Cannot get show maximize button from private data${privateData.type} with config ${privateData.type !== "workspace" ? privateData.config.type : ""}`);
+            }
+            return privateData.config.showMaximizeButton;
+        }
+        getShowEjectButton(model) {
+            const privateData = getData$3(this, model);
+            if (privateData.type !== "group") {
+                throw new Error(`Cannot get show eject button from private data${privateData.type} with config ${privateData.type !== "workspace" ? privateData.config.type : ""}`);
+            }
+            return privateData.config.showEjectButton;
+        }
+        getShowAddWindowButton(model) {
+            const privateData = getData$3(this, model);
+            if (privateData.type !== "group") {
+                throw new Error(`Cannot get add window button from private data${privateData.type} with config ${privateData.type !== "workspace" ? privateData.config.type : ""}`);
+            }
+            return privateData.config.showAddWindowButton;
+        }
+        getMinWidth(model) {
+            const privateData = getData$3(this, model);
+            return privateData.config.minWidth;
+        }
+        getMaxWidth(model) {
+            const privateData = getData$3(this, model);
+            return privateData.config.maxWidth;
+        }
+        getMinHeight(model) {
+            const privateData = getData$3(this, model);
+            return privateData.config.minHeight;
+        }
+        getMaxHeight(model) {
+            const privateData = getData$3(this, model);
+            return privateData.config.maxHeight;
+        }
+        getWidthInPx(model) {
+            const privateData = getData$3(this, model);
+            return privateData.config.widthInPx;
+        }
+        getHeightInPx(model) {
+            const privateData = getData$3(this, model);
+            return privateData.config.heightInPx;
+        }
+        getIsPinned(model) {
+            const privateData = getData$3(this, model);
+            return privateData.config.isPinned;
+        }
+        setHeight(model, height) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const modelData = getData$3(this, model);
+                const { controller } = modelData;
+                yield controller.resizeItem(getData$3(this, model).id, {
+                    height
+                });
+                if (modelData.parent instanceof Workspace) {
+                    yield modelData.parent.refreshReference();
+                }
+                else {
+                    yield this.getMyWorkspace(modelData.parent).refreshReference();
+                }
+            });
+        }
+        setWidth(model, width) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const modelData = getData$3(this, model);
+                const { controller } = modelData;
+                yield controller.resizeItem(getData$3(this, model).id, {
+                    width
+                });
+                if (modelData.parent instanceof Workspace) {
+                    yield modelData.parent.refreshReference();
+                }
+                else {
+                    yield this.getMyWorkspace(modelData.parent).refreshReference();
+                }
+            });
+        }
+        setSize(model, width, height) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const modelData = getData$3(this, model);
+                const { controller } = modelData;
+                yield controller.resizeItem(getData$3(this, model).id, {
+                    width,
+                    height
+                });
+                if (modelData.parent instanceof Workspace) {
+                    yield modelData.parent.refreshReference();
+                }
+                else {
+                    yield this.getMyWorkspace(modelData.parent).refreshReference();
+                }
+            });
+        }
         transformDefinition(type, definition) {
             let parentDefinition;
             if (typeof definition === "undefined") {
@@ -3070,43 +3679,44 @@
         }
         refreshChildren(config) {
             const { parent, children, existingChildren, workspace } = config;
-            if (parent instanceof Window) {
+            if (parent instanceof Window || parent.type === "window") {
                 return;
             }
             const newChildren = children.map((newChildSnapshot) => {
-                let childToAdd = existingChildren.find((c) => c.id === newChildSnapshot.id);
-                const childType = newChildSnapshot.type;
+                let childToAdd = existingChildren.find((child) => {
+                    return child.type === "window" ? child.elementId === newChildSnapshot.id : child.id === newChildSnapshot.id;
+                });
                 if (childToAdd) {
                     this.privateDataManager.remapChild(childToAdd, {
-                        parent,
+                        parent: parent,
                         children: [],
                         config: newChildSnapshot.config
                     });
                 }
                 else {
-                    if (childType === "window") {
-                        const createConfig = {
+                    let createConfig;
+                    if (newChildSnapshot.type === "window") {
+                        createConfig = {
                             id: newChildSnapshot.id,
-                            parent,
+                            parent: parent,
                             frame: workspace.frame,
                             workspace,
-                            config: newChildSnapshot.config
+                            config: newChildSnapshot.config,
                         };
-                        childToAdd = this.ioc.getModel(childType, createConfig);
                     }
                     else {
-                        const createConfig = {
+                        createConfig = {
                             id: newChildSnapshot.id,
-                            children: [],
-                            parent,
+                            parent: parent,
                             frame: workspace.frame,
                             workspace,
-                            config: newChildSnapshot.config
+                            config: newChildSnapshot.config,
+                            children: []
                         };
-                        childToAdd = this.ioc.getModel(childType, createConfig);
                     }
+                    childToAdd = this.ioc.getModel(newChildSnapshot.type, createConfig);
                 }
-                if (childType !== "window") {
+                if (newChildSnapshot.type !== "window") {
                     this.refreshChildren({
                         workspace, existingChildren,
                         children: newChildSnapshot.children,
@@ -3166,6 +3776,31 @@
                     }
                     resolve();
                 });
+            });
+        }
+        hibernateWorkspace(workspaceId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield this.bridge.send(OPERATIONS.hibernateWorkspace.name, { workspaceId });
+            });
+        }
+        resumeWorkspace(workspaceId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield this.bridge.send(OPERATIONS.resumeWorkspace.name, { workspaceId });
+            });
+        }
+        lockWorkspace(workspaceId, config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield this.bridge.send(OPERATIONS.lockWorkspace.name, { workspaceId, config });
+            });
+        }
+        lockWindow(windowPlacementId, config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield this.bridge.send(OPERATIONS.lockWindow.name, { windowPlacementId, config });
+            });
+        }
+        lockContainer(itemId, type, config) {
+            return __awaiter(this, void 0, void 0, function* () {
+                yield this.bridge.send(OPERATIONS.lockContainer.name, { itemId, type, config });
             });
         }
     }
@@ -3369,6 +4004,12 @@
                 yield this.bridge.send(OPERATIONS.changeFrameState.name, { frameId, requestedState: state });
             });
         }
+        getFrameBounds(frameId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const frameResult = yield this.bridge.send(OPERATIONS.getFrameBounds.name, { itemId: frameId });
+                return frameResult.bounds;
+            });
+        }
         getFrameState(frameId) {
             return __awaiter(this, void 0, void 0, function* () {
                 const frameResult = yield this.bridge.send(OPERATIONS.getFrameState.name, { itemId: frameId });
@@ -3422,6 +4063,15 @@
                 return yield this.base.setItemTitle(itemId, title);
             });
         }
+        flatChildren(children) {
+            return children.reduce((soFar, child) => {
+                soFar.push(child);
+                if (child.type !== "window") {
+                    soFar.push(...this.flatChildren(child.children));
+                }
+                return soFar;
+            }, []);
+        }
         refreshChildren(config) {
             return this.base.refreshChildren(config);
         }
@@ -3430,6 +4080,32 @@
         }
         iterateFilterChildren(children, predicate) {
             return this.base.iterateFilterChildren(children, predicate);
+        }
+        hibernateWorkspace(workspaceId) {
+            return this.base.hibernateWorkspace(workspaceId);
+        }
+        resumeWorkspace(workspaceId) {
+            return this.base.resumeWorkspace(workspaceId);
+        }
+        lockWorkspace(workspaceId, config) {
+            return this.base.lockWorkspace(workspaceId, config);
+        }
+        lockWindow(windowPlacementId, config) {
+            return this.base.lockWindow(windowPlacementId, config);
+        }
+        lockContainer(itemId, type, config) {
+            return this.base.lockContainer(itemId, type, config);
+        }
+        getFrameConstraints(frameId) {
+            return __awaiter(this, void 0, void 0, function* () {
+                const frameSnapshot = yield this.getSnapshot(frameId, "frame");
+                return {
+                    minWidth: frameSnapshot.config.minWidth,
+                    maxWidth: frameSnapshot.config.maxWidth,
+                    minHeight: frameSnapshot.config.minHeight,
+                    maxHeight: frameSnapshot.config.maxHeight,
+                };
+            });
         }
         handleCoreLocalSubscription(config, levelId) {
             return __awaiter(this, void 0, void 0, function* () {
@@ -3581,7 +4257,9 @@
                         type === "row" ? new Row(this.parentBase) : new Group(this.parentBase);
                     const builtChildren = this.buildChildren(children, frame, workspace, newParent);
                     const parentPrivateData = {
-                        id, parent, frame, workspace, config, type,
+                        id, parent, frame, workspace,
+                        config,
+                        type,
                         controller: this.controller,
                         children: builtChildren,
                     };
